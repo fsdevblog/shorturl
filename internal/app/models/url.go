@@ -4,6 +4,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const ShortIdentifierLength = 8
+
 type URL struct {
 	gorm.Model
 	URL             string `gorm:"index:idx_url,unique;size:255"`

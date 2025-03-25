@@ -1,7 +1,7 @@
 package services
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"encoding/base64"
 	"strings"
 
@@ -16,8 +16,8 @@ type urlService struct {
 	urlRepo repositories.IUrl
 }
 
-func (u *urlService) GetByShortIdentifier(shortId string) (*models.URL, error) {
-	sURL, err := u.urlRepo.GetByShortIdentifier(shortId)
+func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
+	sURL, err := u.urlRepo.GetByShortIdentifier(shortID)
 	if err != nil {
 		return nil, err // nolint:wrapcheck
 	}
@@ -89,9 +89,9 @@ func (u *urlService) generateShortIdentifier(rawURL string, delta uint) string {
 	b = append(b, byte(delta))
 
 	// Создаем хеш и конвертим в base62
-	hash := md5.Sum(b)
+	hash := md5.Sum(b) //nolint:gosec
 	base62 := base64.URLEncoding.EncodeToString(hash[:])
-	return base62[:8]
+	return base62[:models.ShortIdentifierLength]
 }
 
 func NewURLService(urlRepo repositories.IUrl) IURLService {

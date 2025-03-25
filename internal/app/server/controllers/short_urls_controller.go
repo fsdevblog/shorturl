@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/fsdevblog/shorturl/internal/app/models"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/fsdevblog/shorturl/internal/app/services"
@@ -36,7 +38,7 @@ func (s *ShortURLController) Handler(w http.ResponseWriter, r *http.Request) {
 func (s *ShortURLController) redirect(w http.ResponseWriter, r *http.Request) {
 	sIdentifier := r.URL.Path[1:]
 
-	if len(sIdentifier) != 8 {
+	if len(sIdentifier) != models.ShortIdentifierLength {
 		http.Error(w, ErrNotFound.Error(), http.StatusNotFound)
 		return
 	}

@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+
+	"gorm.io/gorm"
 
 	"github.com/fsdevblog/shorturl/internal/app/models"
 
@@ -13,6 +16,9 @@ import (
 
 	"github.com/fsdevblog/shorturl/internal/app/services"
 )
+
+// hostnameRegex в соответствии с `RFC 1123` за исключением - исключает корневые доменные имена (без зоны).
+var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-Z0-9](-?[a-zA-Z0-9])*)$`)
 
 type ShortURLController struct {
 	urlService services.IURLService
@@ -46,6 +52,11 @@ func (s *ShortURLController) redirect(w http.ResponseWriter, r *http.Request) {
 	sURL, err := s.urlService.GetByShortIdentifier(sIdentifier)
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, ErrNotFound.Error(), http.StatusNotFound)
+			return
+		}
+
 		logrus.WithError(err).Error()
 		http.Error(w, ErrInternal.Error(), http.StatusInternalServerError)
 		return
@@ -95,6 +106,7 @@ func getFullURL(r *http.Request, shortID string) string {
 // validateURL проверяет, является ли строка корректным URL.
 func validateURL(rawURL string) (*url.URL, error) {
 	parsedURL, err := url.ParseRequestURI(rawURL)
+
 	if err != nil {
 		return nil, errors.New("invalid URL format")
 	}
@@ -105,6 +117,10 @@ func validateURL(rawURL string) (*url.URL, error) {
 
 	if parsedURL.Host == "" {
 		return nil, errors.New("URL must have a host")
+	}
+
+	if parsedURL.Hostname() != "localhost" && !hostnameRegex.MatchString(parsedURL.Hostname()) {
+		return nil, errors.New("invalid hostname")
 	}
 
 	return parsedURL, nil

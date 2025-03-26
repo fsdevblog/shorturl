@@ -46,6 +46,8 @@ func TestShortURLController_createShortURL(t *testing.T) {
 				},
 			})
 
+			defer res.Body.Close()
+
 			assert.Equal(t, tt.wantStatus, res.StatusCode)
 
 			if tt.wantStatus == http.StatusCreated {
@@ -92,12 +94,13 @@ func TestShortURLController_redirect(t *testing.T) {
 					NewShortURLController(urlServMock).redirect(w, r)
 				},
 			})
+			defer res.Body.Close()
 
 			assert.Equal(t, tt.wantStatus, res.StatusCode)
 			if tt.wantStatus == http.StatusTemporaryRedirect {
 				assert.Equal(t, redirectTo, res.Header.Get("Location"))
 			} else {
-				assert.Equal(t, "", res.Header.Get("Location"))
+				assert.Empty(t, res.Header.Get("Location"))
 			}
 		})
 	}

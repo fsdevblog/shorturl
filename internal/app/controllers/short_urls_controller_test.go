@@ -9,22 +9,32 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
 
 	"github.com/fsdevblog/shorturl/internal/app/models"
 	"github.com/fsdevblog/shorturl/internal/app/services/smocks"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestShortURLController_createShortURL(t *testing.T) {
-	urlServMock := new(smocks.URLMock)
+type ShortURLControllerSuite struct {
+	suite.Suite
+	urlServMock *smocks.URLMock
+	router      *gin.Engine
+}
 
+func (s *ShortURLControllerSuite) SetupTest() {
+	s.urlServMock = new(smocks.URLMock)
+	s.router = SetupRouter(s.urlServMock)
+}
+
+func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
 	serverHostname := "example.com"
 
-	urlServMock.On("Create", validURL).
+	s.urlServMock.On("Create", validURL).
 		Return(&models.URL{ShortIdentifier: shortIdentifier, URL: validURL}, nil)
 
 	tests := []struct {
@@ -36,41 +46,32 @@ func TestShortURLController_createShortURL(t *testing.T) {
 		{name: "invalid", shortURL: invalidURL, wantStatus: http.StatusUnprocessableEntity},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res := makeRequest(mRequestFields{
-				method: http.MethodPost,
-				url:    "/",
-				body:   strings.NewReader(tt.shortURL),
-				f: func(w *httptest.ResponseRecorder, r *http.Request) {
-					NewShortURLController(urlServMock).createShortURL(w, r)
-				},
-			})
+		s.Run(tt.name, func() {
+			res := s.makeRequest(http.MethodPost, "/", strings.NewReader(tt.shortURL))
 
 			defer res.Body.Close()
 
-			assert.Equal(t, tt.wantStatus, res.StatusCode)
+			s.Equal(tt.wantStatus, res.StatusCode)
 
 			if tt.wantStatus == http.StatusCreated {
 				body, _ := io.ReadAll(res.Body)
-				assert.Equal(t, fmt.Sprintf("http://%s/%s", serverHostname, shortIdentifier), string(body))
+				s.Equal(fmt.Sprintf("http://%s/%s", serverHostname, shortIdentifier), string(body))
 			}
 		})
 	}
 }
 
-func TestShortURLController_redirect(t *testing.T) {
-	urlServMock := new(smocks.URLMock)
-
+func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 	validShortID := "12345678"
 	notExistShortID := "12345671"
 	inValidShortID := "123"
 
 	redirectTo := "https://test.com/test/123"
 
-	urlServMock.On("GetByShortIdentifier", validShortID).
+	s.urlServMock.On("GetByShortIdentifier", validShortID).
 		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil)
 
-	urlServMock.On("GetByShortIdentifier", notExistShortID).
+	s.urlServMock.On("GetByShortIdentifier", notExistShortID).
 		Return(nil, gorm.ErrRecordNotFound)
 
 	tests := []struct {
@@ -85,29 +86,23 @@ func TestShortURLController_redirect(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res := makeRequest(mRequestFields{
-				method: http.MethodGet,
-				url:    "/" + tt.requestURI,
-				body:   nil,
-				f: func(w *httptest.ResponseRecorder, r *http.Request) {
-					NewShortURLController(urlServMock).redirect(w, r)
-				},
-			})
+		s.Run(tt.name, func() {
+			res := s.makeRequest(http.MethodGet, "/"+tt.requestURI, nil)
+
 			defer res.Body.Close()
 
-			assert.Equal(t, tt.wantStatus, res.StatusCode)
+			s.Equal(tt.wantStatus, res.StatusCode)
 			if tt.wantStatus == http.StatusTemporaryRedirect {
-				assert.Equal(t, redirectTo, res.Header.Get("Location"))
+				s.Equal(redirectTo, res.Header.Get("Location"))
 			} else {
-				assert.Empty(t, res.Header.Get("Location"))
+				s.Empty(res.Header.Get("Location"))
 			}
 		})
 	}
-	urlServMock.AssertNumberOfCalls(t, "GetByShortIdentifier", 2)
+	s.urlServMock.AssertNumberOfCalls(s.T(), "GetByShortIdentifier", 2)
 }
 
-func Test_validateURL(t *testing.T) {
+func (s *ShortURLControllerSuite) Test_validateURL() {
 	validRaw := "https://test.com"
 	validLocalhostRaw := "https://localhost"
 	validIPRaw := "https://123.123.123.123/test"
@@ -132,31 +127,27 @@ func Test_validateURL(t *testing.T) {
 		{name: "ip address", rawURL: validIPRaw, want: validIP, wantErr: false},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		s.Run(tt.name, func() {
 			got, err := validateURL(tt.rawURL)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validateURL() `%s` error = %v, wantErr %v", tt.name, err, tt.wantErr)
+				s.Failf("validateURL() `%s` error = %v, wantErr %v", tt.name, err, tt.wantErr)
 				return
 			}
-			if !assert.Equal(t, tt.want, got) {
-				t.Errorf("validateURL() `%s` got = %v, wantErr %v", tt.name, got, tt.want)
-			}
+			s.Equal(tt.want, got)
 		})
 	}
 }
 
-type mRequestFields struct {
-	method string
-	url    string
-	body   io.Reader
-	f      func(*httptest.ResponseRecorder, *http.Request)
-}
-
-func makeRequest(fields mRequestFields) *http.Response {
-	request := httptest.NewRequest(fields.method, fields.url, fields.body)
+// makeRequest вспомогательная функция создающая тестовый http запрос.
+func (s *ShortURLControllerSuite) makeRequest(method, url string, body io.Reader) *http.Response {
+	request := httptest.NewRequest(method, url, body)
 	recorder := httptest.NewRecorder()
 
-	fields.f(recorder, request)
+	s.router.ServeHTTP(recorder, request)
 
 	return recorder.Result()
+}
+
+func TestShortURLControllerSuite(t *testing.T) {
+	suite.Run(t, new(ShortURLControllerSuite))
 }

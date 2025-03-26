@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/gin-gonic/gin"
+
 	"gorm.io/gorm"
 
 	"github.com/fsdevblog/shorturl/internal/app/models"
@@ -30,22 +32,11 @@ func NewShortURLController(urlService services.IURLService) *ShortURLController 
 	}
 }
 
-func (s *ShortURLController) Handler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.redirect(w, r)
-	case http.MethodPost:
-		s.createShortURL(w, r)
-	default:
-		http.Error(w, ErrMethodNowAllowed.Error(), http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *ShortURLController) redirect(w http.ResponseWriter, r *http.Request) {
-	sIdentifier := r.URL.Path[1:]
+func (s *ShortURLController) Redirect(ctx *gin.Context) {
+	sIdentifier := ctx.Param("shortID")
 
 	if len(sIdentifier) != models.ShortIdentifierLength {
-		http.Error(w, ErrNotFound.Error(), http.StatusNotFound)
+		ctx.String(http.StatusNotFound, ErrNotFound.Error())
 		return
 	}
 
@@ -53,31 +44,30 @@ func (s *ShortURLController) redirect(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, ErrNotFound.Error(), http.StatusNotFound)
+			ctx.String(http.StatusNotFound, ErrNotFound.Error())
 			return
 		}
 
 		logrus.WithError(err).Error()
-		http.Error(w, ErrInternal.Error(), http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
 		return
 	}
 
-	w.Header().Set("Location", sURL.URL)
-	w.WriteHeader(http.StatusTemporaryRedirect)
+	ctx.Redirect(http.StatusTemporaryRedirect, sURL.URL)
 }
 
 // CreateShortURL принимаем plain запрос со ссылкой.
-func (s *ShortURLController) createShortURL(w http.ResponseWriter, r *http.Request) {
-	body, readErr := io.ReadAll(r.Body)
+func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
+	body, readErr := io.ReadAll(ctx.Request.Body)
 	if readErr != nil {
-		http.Error(w, ErrInternal.Error(), http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
 		return
 	}
 
 	parsedURL, parseErr := validateURL(string(body))
 
 	if parseErr != nil {
-		http.Error(w, parseErr.Error(), http.StatusUnprocessableEntity)
+		ctx.String(http.StatusUnprocessableEntity, parseErr.Error())
 		return
 	}
 
@@ -85,13 +75,11 @@ func (s *ShortURLController) createShortURL(w http.ResponseWriter, r *http.Reque
 
 	if createErr != nil {
 		logrus.WithError(createErr).Error()
-		http.Error(w, ErrInternal.Error(), http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-
-	_, _ = w.Write([]byte(getFullURL(r, sURL.ShortIdentifier)))
+	ctx.String(http.StatusCreated, getFullURL(ctx.Request, sURL.ShortIdentifier))
 }
 
 // getFullURL создает короткую ссылку.

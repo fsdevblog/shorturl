@@ -18,7 +18,12 @@ import (
 const DBPath = "./shortener.sqlite"
 
 func main() {
-	logrus.SetLevel(logrus.DebugLevel)
+	logLevel := logrus.DebugLevel
+	if os.Getenv("GIN_MODE") == "release" {
+		logLevel = logrus.InfoLevel
+	}
+
+	logrus.SetLevel(logLevel)
 	logrus.SetOutput(os.Stdout)
 	logrus.SetFormatter(&logrus.TextFormatter{})
 
@@ -32,6 +37,7 @@ func main() {
 	appConf := config.LoadConfig()
 	router := controllers.SetupRouter(urlService, appConf)
 
+	logrus.Debugf("Server is running with config: %+v", *appConf)
 	routerErr := router.Run(appConf.ServerAddress)
 	if routerErr != nil {
 		logrus.Fatal(routerErr)

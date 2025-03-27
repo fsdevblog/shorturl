@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fsdevblog/shorturl/internal/app/config"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
 	"gorm.io/gorm"
@@ -21,33 +23,38 @@ type ShortURLControllerSuite struct {
 	suite.Suite
 	urlServMock *smocks.URLMock
 	router      *gin.Engine
+	config      *config.Config
 }
 
 func (s *ShortURLControllerSuite) SetupTest() {
 	s.urlServMock = new(smocks.URLMock)
-	s.router = SetupRouter(s.urlServMock)
+	appConf := config.Config{
+		ServerPort: "80",
+		BaseURL:    &url.URL{Scheme: "http", Host: "test.com:8080"},
+	}
+	s.config = &appConf
+	s.router = SetupRouter(s.urlServMock, &appConf)
 }
 
 func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
-	serverHostname := "example.com"
 
 	s.urlServMock.On("Create", validURL).
 		Return(&models.URL{ShortIdentifier: shortIdentifier, URL: validURL}, nil)
 
 	tests := []struct {
 		name       string
-		shortURL   string
+		redirectTo string
 		wantStatus int
 	}{
-		{name: "valid", shortURL: validURL, wantStatus: http.StatusCreated},
-		{name: "invalid", shortURL: invalidURL, wantStatus: http.StatusUnprocessableEntity},
+		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
+		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
 	}
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			res := s.makeRequest(http.MethodPost, "/", strings.NewReader(tt.shortURL))
+			res := s.makeRequest(http.MethodPost, "/", strings.NewReader(tt.redirectTo))
 
 			defer res.Body.Close()
 
@@ -55,7 +62,8 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 
 			if tt.wantStatus == http.StatusCreated {
 				body, _ := io.ReadAll(res.Body)
-				s.Equal(fmt.Sprintf("http://%s/%s", serverHostname, shortIdentifier), string(body))
+				shortURL := fmt.Sprintf("%s/%s", s.config.BaseURL.String(), shortIdentifier)
+				s.Equal(shortURL, string(body))
 			}
 		})
 	}

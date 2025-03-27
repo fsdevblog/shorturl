@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	"github.com/fsdevblog/shorturl/internal/app/config"
+
 	"github.com/fsdevblog/shorturl/internal/app/controllers"
 
 	"github.com/fsdevblog/shorturl/internal/app/repositories/sqlite"
@@ -27,8 +29,10 @@ func main() {
 
 	urlService := services.NewURLService(urlRepo)
 
-	router := controllers.SetupRouter(urlService)
-	routerErr := router.Run(":8080")
+	appConf := config.LoadConfig()
+	router := controllers.SetupRouter(urlService, appConf)
+
+	routerErr := router.Run(":" + appConf.ServerPort)
 	if routerErr != nil {
 		logrus.Fatal(routerErr)
 	}

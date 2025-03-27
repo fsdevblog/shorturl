@@ -24,11 +24,13 @@ var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-
 
 type ShortURLController struct {
 	urlService services.IURLService
+	baseURL    *url.URL
 }
 
-func NewShortURLController(urlService services.IURLService) *ShortURLController {
+func NewShortURLController(urlService services.IURLService, baseURL *url.URL) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
+		baseURL:    baseURL,
 	}
 }
 
@@ -79,16 +81,19 @@ func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
 		return
 	}
 
-	ctx.String(http.StatusCreated, getFullURL(ctx.Request, sURL.ShortIdentifier))
+	ctx.String(http.StatusCreated, s.getShortURL(ctx.Request, sURL.ShortIdentifier))
 }
 
-// getFullURL создает короткую ссылку.
-func getFullURL(r *http.Request, shortID string) string {
+// getShortURL вспомогательный метод который создает короткую ссылку.
+func (s *ShortURLController) getShortURL(r *http.Request, shortID string) string {
 	var scheme = "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://%s/%s", scheme, r.Host, shortID)
+	if s.baseURL == nil {
+		return fmt.Sprintf("%s://%s/%s", scheme, r.Host, shortID)
+	}
+	return fmt.Sprintf("%s/%s", s.baseURL, shortID)
 }
 
 // validateURL проверяет, является ли строка корректным URL.

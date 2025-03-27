@@ -9,7 +9,7 @@ import (
 
 type Config struct {
 	// Порт на котором запустится сервер
-	ServerPort string
+	ServerAddress string
 	// Базовый адрес результирующего сокращенного URL
 	BaseURL *url.URL
 }
@@ -18,7 +18,7 @@ func LoadConfig() *Config {
 	var config Config
 	bDesc := "Базовый адрес результирующего сокращенного URL (по умолчанию Scheme://Host запущенного сервера)"
 
-	flag.StringVar(&config.ServerPort, "a", "8080", "Порт сервера")
+	flag.StringVar(&config.ServerAddress, "a", "localhost:8080", "Адрес сервера")
 	flag.Func("b", bDesc, func(rawURL string) error {
 		parsedURL, err := url.ParseRequestURI(rawURL)
 		if err != nil {

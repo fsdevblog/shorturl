@@ -32,7 +32,7 @@ func main() {
 	appConf := config.LoadConfig()
 	router := controllers.SetupRouter(urlService, appConf)
 
-	routerErr := router.Run(":" + appConf.ServerPort)
+	routerErr := router.Run(appConf.ServerAddress)
 	if routerErr != nil {
 		logrus.Fatal(routerErr)
 	}

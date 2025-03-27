@@ -2,9 +2,10 @@ package config
 
 import (
 	"flag"
+	"net/url"
+
 	"github.com/caarlos0/env/v11"
 	"github.com/pkg/errors"
-	"net/url"
 )
 
 type Config struct {
@@ -26,7 +27,7 @@ func LoadConfig() *Config {
 	return mergeConfig(&envConfig, &flagsConfig)
 }
 
-// loadsFlags парсит флаги командной строки
+// loadsFlags парсит флаги командной строки.
 func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
 
@@ -48,7 +49,7 @@ func loadsFlags(flagsConfig *Config) {
 	flag.Parse()
 }
 
-// mergeConfig сливает структуры для env и флагов
+// mergeConfig сливает структуры для env и флагов.
 func mergeConfig(envConfig, flagsConfig *Config) *Config {
 	return &Config{
 		ServerAddress: defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),

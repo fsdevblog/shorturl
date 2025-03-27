@@ -29,7 +29,7 @@ type ShortURLControllerSuite struct {
 func (s *ShortURLControllerSuite) SetupTest() {
 	s.urlServMock = new(smocks.URLMock)
 	appConf := config.Config{
-		ServerAddress: "80",
+		ServerAddress: ":80",
 		BaseURL:       &url.URL{Scheme: "http", Host: "test.com:8080"},
 	}
 	s.config = &appConf

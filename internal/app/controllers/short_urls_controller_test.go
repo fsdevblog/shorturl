@@ -9,14 +9,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fsdevblog/shorturl/internal/app/config"
+	"github.com/fsdevblog/shorturl/internal/app/apperrs"
+	"github.com/sirupsen/logrus"
 
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/suite"
-	"gorm.io/gorm"
+	"github.com/fsdevblog/shorturl/internal/app/config"
 
 	"github.com/fsdevblog/shorturl/internal/app/models"
 	"github.com/fsdevblog/shorturl/internal/app/services/smocks"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/suite"
 )
 
 type ShortURLControllerSuite struct {
@@ -31,6 +32,7 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	appConf := config.Config{
 		ServerAddress: ":80",
 		BaseURL:       &url.URL{Scheme: "http", Host: "test.com:8080"},
+		Logger:        logrus.New(),
 	}
 	s.config = &appConf
 	s.router = SetupRouter(s.urlServMock, &appConf)
@@ -80,7 +82,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil)
 
 	s.urlServMock.On("GetByShortIdentifier", notExistShortID).
-		Return(nil, gorm.ErrRecordNotFound)
+		Return(nil, apperrs.ErrRecordNotFound)
 
 	tests := []struct {
 		name       string

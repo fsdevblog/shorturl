@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(urlService services.IURLService, appConf *config.Config) *gin.Engine {
+func SetupRouter(urlService services.URLShortener, appConf *config.Config) *gin.Engine {
 	r := gin.Default()
 
 	shortURLController := NewShortURLController(urlService, appConf.BaseURL)

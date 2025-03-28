@@ -8,13 +8,11 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/fsdevblog/shorturl/internal/app/apperrs"
+
 	"github.com/gin-gonic/gin"
 
-	"gorm.io/gorm"
-
 	"github.com/fsdevblog/shorturl/internal/app/models"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/fsdevblog/shorturl/internal/app/services"
 )
@@ -23,11 +21,11 @@ import (
 var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-Z0-9](-?[a-zA-Z0-9])*)$`)
 
 type ShortURLController struct {
-	urlService services.IURLService
+	urlService services.URLShortener
 	baseURL    *url.URL
 }
 
-func NewShortURLController(urlService services.IURLService, baseURL *url.URL) *ShortURLController {
+func NewShortURLController(urlService services.URLShortener, baseURL *url.URL) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
 		baseURL:    baseURL,
@@ -38,20 +36,19 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 	sIdentifier := ctx.Param("shortID")
 
 	if len(sIdentifier) != models.ShortIdentifierLength {
-		ctx.String(http.StatusNotFound, ErrNotFound.Error())
+		ctx.String(http.StatusNotFound, apperrs.ErrRecordNotFound.Error())
 		return
 	}
 
 	sURL, err := s.urlService.GetByShortIdentifier(sIdentifier)
 
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			ctx.String(http.StatusNotFound, ErrNotFound.Error())
+		if errors.Is(err, apperrs.ErrRecordNotFound) {
+			ctx.String(http.StatusNotFound, err.Error())
 			return
 		}
 
-		logrus.WithError(err).Error()
-		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -62,7 +59,7 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
 	body, readErr := io.ReadAll(ctx.Request.Body)
 	if readErr != nil {
-		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
+		ctx.String(http.StatusInternalServerError, apperrs.ErrInternal.Error())
 		return
 	}
 
@@ -76,8 +73,7 @@ func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
 	sURL, createErr := s.urlService.Create(parsedURL.String())
 
 	if createErr != nil {
-		logrus.WithError(createErr).Error()
-		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
+		ctx.String(http.StatusInternalServerError, createErr.Error())
 		return
 	}
 

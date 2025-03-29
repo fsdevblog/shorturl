@@ -11,19 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
-type urlRepo struct {
+type URLRepo struct {
 	db     *gorm.DB
 	logger *logrus.Entry
 }
 
-func NewURLRepo(db *gorm.DB, logger *logrus.Logger) repositories.URLRepository {
-	return &urlRepo{
+func NewURLRepo(db *gorm.DB, logger *logrus.Logger) *URLRepo {
+	return &URLRepo{
 		db:     db,
 		logger: logger.WithField("module", "repository/sql/url"),
 	}
 }
 
-func (u *urlRepo) Create(rawURL string) (*models.URL, error) {
+func (u *URLRepo) Create(rawURL string) (*models.URL, error) {
 	var sURL models.URL
 	var delta uint = 1
 	var deltaMax uint = 10
@@ -83,7 +83,7 @@ func (u *urlRepo) Create(rawURL string) (*models.URL, error) {
 	return &sURL, nil
 }
 
-func (u *urlRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
+func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	var url models.URL
 	if err := u.db.Where("short_identifier = ?", shortID).First(&url).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -94,7 +94,7 @@ func (u *urlRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	return &url, nil
 }
 
-func (u *urlRepo) GetByURL(rawURL string) (*models.URL, error) {
+func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	var url models.URL
 	if err := u.db.Where("url = ?", rawURL).First(&url).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -107,6 +107,6 @@ func (u *urlRepo) GetByURL(rawURL string) (*models.URL, error) {
 }
 
 // withTx вспомогательный метод для работы с sql транзакциями.
-func (u *urlRepo) withTx(tx *gorm.DB) repositories.URLRepository {
+func (u *URLRepo) withTx(tx *gorm.DB) *URLRepo {
 	return NewURLRepo(tx, u.logger.Logger)
 }

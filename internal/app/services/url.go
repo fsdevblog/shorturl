@@ -10,9 +10,18 @@ import (
 	"github.com/fsdevblog/shorturl/internal/app/repositories"
 )
 
+type URLRepository interface {
+	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
+	Create(rawURL string) (*models.URL, error)
+	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
+	GetByShortIdentifier(shortID string) (*models.URL, error)
+	// GetByURL находит запись в хранилище по заданной ссылке
+	GetByURL(rawURL string) (*models.URL, error)
+}
+
 // urlService Сервис работает с базой данных в контексте таблицы `urls`.
 type urlService struct {
-	urlRepo repositories.URLRepository
+	urlRepo URLRepository
 }
 
 func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
@@ -35,6 +44,6 @@ func (u *urlService) Create(rawURL string) (*models.URL, error) {
 	return record, nil
 }
 
-func NewURLService(urlRepo repositories.URLRepository) URLShortener {
+func NewURLService(urlRepo URLRepository) URLShortener {
 	return &urlService{urlRepo: urlRepo}
 }

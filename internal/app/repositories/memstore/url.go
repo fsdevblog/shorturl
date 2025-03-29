@@ -10,23 +10,23 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type urlRepo struct {
+type URLRepo struct {
 	s      *db.MemoryStorage
 	logger *logrus.Entry
 }
 
-func NewURLRepo(store *db.MemoryStorage, logger *logrus.Logger) repositories.URLRepository {
-	return &urlRepo{
+func NewURLRepo(store *db.MemoryStorage, logger *logrus.Logger) *URLRepo {
+	return &URLRepo{
 		s:      store,
 		logger: logger.WithField("module", "repository/memstore/url"),
 	}
 }
 
-func (u *urlRepo) Create(rawURL string) (*models.URL, error) {
+func (u *URLRepo) Create(rawURL string) (*models.URL, error) {
 	return u.recursiveCreate(rawURL, 1)
 }
 
-func (u *urlRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
+func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	url, err := mstorage.Get[models.URL](shortID, u.s.MStorage)
 	if err != nil {
 		if errors.Is(err, mstorage.ErrNotFound) {
@@ -38,7 +38,7 @@ func (u *urlRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	return url, nil
 }
 
-func (u *urlRepo) GetByURL(rawURL string) (*models.URL, error) {
+func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	data := mstorage.GetAll[models.URL](u.s.MStorage)
 
 	for _, val := range data {
@@ -51,7 +51,7 @@ func (u *urlRepo) GetByURL(rawURL string) (*models.URL, error) {
 
 // recursiveCreate вспомогательная рекурсивная функция, возвращает модель с хешем ссылки в обход коллизии.
 // Параметр `delta` служит для создания соли хеша и инкрементится с каждой рекурсией.
-func (u *urlRepo) recursiveCreate(rawURL string, delta uint) (*models.URL, error) {
+func (u *URLRepo) recursiveCreate(rawURL string, delta uint) (*models.URL, error) {
 	shortID := utils.GenerateShortID(rawURL, delta, models.ShortIdentifierLength)
 	existingURL, getErr := mstorage.Get[models.URL](shortID, u.s.MStorage)
 	var maxDelta uint = 10

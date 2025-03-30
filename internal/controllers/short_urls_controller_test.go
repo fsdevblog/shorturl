@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fsdevblog/shorturl/internal/app/apperrs"
+	"github.com/fsdevblog/shorturl/internal/apperrs"
+	"github.com/fsdevblog/shorturl/internal/config"
+	"github.com/fsdevblog/shorturl/internal/models"
+	"github.com/fsdevblog/shorturl/internal/services/smocks"
+
 	"github.com/sirupsen/logrus"
 
-	"github.com/fsdevblog/shorturl/internal/app/config"
-
-	"github.com/fsdevblog/shorturl/internal/app/models"
-	"github.com/fsdevblog/shorturl/internal/app/services/smocks"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
 )

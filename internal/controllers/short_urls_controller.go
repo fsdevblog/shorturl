@@ -8,13 +8,11 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/fsdevblog/shorturl/internal/app/apperrs"
+	"github.com/fsdevblog/shorturl/internal/apperrs"
+	"github.com/fsdevblog/shorturl/internal/models"
+	"github.com/fsdevblog/shorturl/internal/services"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/fsdevblog/shorturl/internal/app/models"
-
-	"github.com/fsdevblog/shorturl/internal/app/services"
 )
 
 // hostnameRegex в соответствии с `RFC 1123` за исключением - исключает корневые доменные имена (без зоны).

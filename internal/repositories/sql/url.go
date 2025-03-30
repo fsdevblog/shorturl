@@ -3,9 +3,10 @@ package sql
 import (
 	"strings"
 
-	"github.com/fsdevblog/shorturl/internal/app/models"
-	"github.com/fsdevblog/shorturl/internal/app/repositories"
-	"github.com/fsdevblog/shorturl/internal/app/utils"
+	"github.com/fsdevblog/shorturl/internal/models"
+	"github.com/fsdevblog/shorturl/internal/repositories"
+	"github.com/fsdevblog/shorturl/internal/utils"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"

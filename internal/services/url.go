@@ -3,11 +3,11 @@ package services
 import (
 	"strings"
 
-	"github.com/fsdevblog/shorturl/internal/app/apperrs"
-	"github.com/pkg/errors"
+	"github.com/fsdevblog/shorturl/internal/apperrs"
+	"github.com/fsdevblog/shorturl/internal/models"
+	"github.com/fsdevblog/shorturl/internal/repositories"
 
-	"github.com/fsdevblog/shorturl/internal/app/models"
-	"github.com/fsdevblog/shorturl/internal/app/repositories"
+	"github.com/pkg/errors"
 )
 
 type URLRepository interface {

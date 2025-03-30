@@ -27,18 +27,19 @@ type Config struct {
 	Logger *logrus.Logger
 }
 
-func LoadConfig() (*Config, error) {
+func LoadConfig() *Config {
 	var flagsConfig, envConfig Config
+	logger := initLogger()
 
 	if err := env.Parse(&envConfig); err != nil {
-		return nil, errors.Wrap(err, "failed to parse env config")
+		logger.Fatal("failed to parse env config")
 	}
 
 	loadsFlags(&flagsConfig)
 
 	conf := mergeConfig(&envConfig, &flagsConfig)
-	conf.Logger = initLogger()
-	return conf, nil
+	conf.Logger = logger
+	return conf
 }
 
 // loadsFlags парсит флаги командной строки.

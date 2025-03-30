@@ -1,4 +1,4 @@
-package mstorage
+package memory
 
 import (
 	"sync"
@@ -25,6 +25,9 @@ func (m *MStorage) Len() int {
 }
 
 func Get[T any](key string, m *MStorage) (*T, error) {
+	m.m.RLock()
+	defer m.m.RUnlock()
+
 	val, ok := m.data[key]
 	if !ok {
 		return nil, ErrNotFound
@@ -49,12 +52,15 @@ func Set[T any](key string, val T, m *MStorage) error {
 }
 
 func GetAll[T any](m *MStorage) []T {
+	m.m.RLock()
+	defer m.m.RUnlock()
+
 	var result = make([]T, 0, len(m.data))
 
 	for _, bytes := range m.data {
 		var val T
 		if err := json.Unmarshal(bytes, &val); err != nil {
-			logrus.WithError(err).Warnf("failed to unmarshal json for object `%+v`", val)
+			logrus.WithError(err).Errorf("failed to unmarshal json for object `%+v`", val)
 			continue
 		}
 		result = append(result, val)

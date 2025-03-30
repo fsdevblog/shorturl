@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"github.com/fsdevblog/shorturl/internal/app/config"
-	"github.com/fsdevblog/shorturl/internal/app/services"
+	"github.com/fsdevblog/shorturl/internal/config"
+	"github.com/fsdevblog/shorturl/internal/services"
 	"github.com/gin-gonic/gin"
 )
 

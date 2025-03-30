@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/fsdevblog/shorturl/internal/app/models"
+	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/pkg/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

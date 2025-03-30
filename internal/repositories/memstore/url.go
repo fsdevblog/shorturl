@@ -1,11 +1,11 @@
 package memstore
 
 import (
-	"github.com/fsdevblog/shorturl/internal/app/db"
-	"github.com/fsdevblog/shorturl/internal/app/db/mstorage"
-	"github.com/fsdevblog/shorturl/internal/app/models"
-	"github.com/fsdevblog/shorturl/internal/app/repositories"
-	"github.com/fsdevblog/shorturl/internal/app/utils"
+	"github.com/fsdevblog/shorturl/internal/db"
+	"github.com/fsdevblog/shorturl/internal/db/memory"
+	"github.com/fsdevblog/shorturl/internal/models"
+	"github.com/fsdevblog/shorturl/internal/repositories"
+	"github.com/fsdevblog/shorturl/internal/utils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -27,9 +27,9 @@ func (u *URLRepo) Create(rawURL string) (*models.URL, error) {
 }
 
 func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
-	url, err := mstorage.Get[models.URL](shortID, u.s.MStorage)
+	url, err := memory.Get[models.URL](shortID, u.s.MStorage)
 	if err != nil {
-		if errors.Is(err, mstorage.ErrNotFound) {
+		if errors.Is(err, memory.ErrNotFound) {
 			return nil, repositories.ErrNotFound
 		}
 		u.logger.WithError(err).Errorf("failed to get record by short identifier %s", shortID)
@@ -39,7 +39,7 @@ func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 }
 
 func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
-	data := mstorage.GetAll[models.URL](u.s.MStorage)
+	data := memory.GetAll[models.URL](u.s.MStorage)
 
 	for _, val := range data {
 		if val.URL == rawURL {
@@ -53,10 +53,10 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 // Параметр `delta` служит для создания соли хеша и инкрементится с каждой рекурсией.
 func (u *URLRepo) recursiveCreate(rawURL string, delta uint) (*models.URL, error) {
 	shortID := utils.GenerateShortID(rawURL, delta, models.ShortIdentifierLength)
-	existingURL, getErr := mstorage.Get[models.URL](shortID, u.s.MStorage)
+	existingURL, getErr := memory.Get[models.URL](shortID, u.s.MStorage)
 	var maxDelta uint = 10
 	// если ошибка отличная от ErrNotFound, возвращаем её
-	if getErr != nil && !errors.Is(getErr, mstorage.ErrNotFound) {
+	if getErr != nil && !errors.Is(getErr, memory.ErrNotFound) {
 		return nil, getErr
 	}
 
@@ -83,7 +83,7 @@ func (u *URLRepo) recursiveCreate(rawURL string, delta uint) (*models.URL, error
 		URL:             rawURL,
 		ShortIdentifier: shortID,
 	}
-	if createErr := mstorage.Set[models.URL](shortID, url, u.s.MStorage); createErr != nil {
+	if createErr := memory.Set[models.URL](shortID, url, u.s.MStorage); createErr != nil {
 		return nil, createErr
 	}
 	return &url, nil

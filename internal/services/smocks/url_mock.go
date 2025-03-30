@@ -1,7 +1,7 @@
 package smocks
 
 import (
-	"github.com/fsdevblog/shorturl/internal/app/models"
+	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/stretchr/testify/mock"
 )
 

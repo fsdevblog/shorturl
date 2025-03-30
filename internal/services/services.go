@@ -3,9 +3,10 @@ package services
 import (
 	"errors"
 
-	"github.com/fsdevblog/shorturl/internal/app/db"
-	"github.com/fsdevblog/shorturl/internal/app/repositories/memstore"
-	"github.com/fsdevblog/shorturl/internal/app/repositories/sql"
+	"github.com/fsdevblog/shorturl/internal/db"
+	"github.com/fsdevblog/shorturl/internal/repositories/memstore"
+	"github.com/fsdevblog/shorturl/internal/repositories/sql"
+
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )

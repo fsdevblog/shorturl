@@ -22,7 +22,7 @@ func NewURLRepo(store *db.MemoryStorage, logger *logrus.Logger) *URLRepo {
 }
 
 func (u *URLRepo) Create(sURL *models.URL) error {
-	if err := memory.Set[models.URL](sURL.ShortIdentifier, *sURL, u.s.MStorage); err != nil {
+	if err := memory.Set[models.URL](sURL.ShortIdentifier, sURL, u.s.MStorage); err != nil {
 		if errors.Is(err, memory.ErrDuplicateKey) {
 			return repositories.ErrDuplicateKey
 		}

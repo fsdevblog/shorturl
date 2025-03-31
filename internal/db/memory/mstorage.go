@@ -48,7 +48,7 @@ func Get[T any](key string, m *MStorage) (*T, error) {
 }
 
 // Set Сохраняет новые пары ключ/значение. Ключ обязан быть уникальным, иначе вернется ошибка ErrDuplicateKey.
-func Set[T any](key string, val T, m *MStorage) error {
+func Set[T any](key string, val *T, m *MStorage) error {
 	if m.IsExist(key) {
 		return ErrDuplicateKey
 	}

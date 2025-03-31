@@ -19,16 +19,16 @@ type URLRepository interface {
 	GetByURL(rawURL string) (*models.URL, error)
 }
 
-// urlService Сервис работает с базой данных в контексте таблицы `urls`.
-type urlService struct {
+// URLService Сервис работает с базой данных в контексте таблицы `urls`.
+type URLService struct {
 	urlRepo URLRepository
 }
 
-func NewURLService(urlRepo URLRepository) URLShortener {
-	return &urlService{urlRepo: urlRepo}
+func NewURLService(urlRepo URLRepository) *URLService {
+	return &URLService{urlRepo: urlRepo}
 }
 
-func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
+func (u *URLService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	sURL, err := u.urlRepo.GetByShortIdentifier(shortID)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
@@ -39,7 +39,7 @@ func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	return sURL, nil
 }
 
-func (u *urlService) Create(rawURL string) (*models.URL, error) {
+func (u *URLService) Create(rawURL string) (*models.URL, error) {
 	// Мы не можем делать вставку и проверять по ошибке дубликата. Проблема в том, что может быть дубликат как в URL,
 	// так и в хеше (коллизия), поэтому сначала мы делаем проверку на существование URL, а только потом делаем
 	// вставку

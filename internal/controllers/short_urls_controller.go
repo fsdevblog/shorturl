@@ -14,15 +14,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type URLShortener interface {
+	Create(rawURL string) (*models.URL, error)
+	GetByShortIdentifier(shortID string) (*models.URL, error)
+}
+
 // hostnameRegex в соответствии с `RFC 1123` за исключением - исключает корневые доменные имена (без зоны).
 var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-Z0-9](-?[a-zA-Z0-9])*)$`)
 
 type ShortURLController struct {
-	urlService services.URLShortener
+	urlService URLShortener
 	baseURL    *url.URL
 }
 
-func NewShortURLController(urlService services.URLShortener, baseURL *url.URL) *ShortURLController {
+func NewShortURLController(urlService URLShortener, baseURL *url.URL) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
 		baseURL:    baseURL,

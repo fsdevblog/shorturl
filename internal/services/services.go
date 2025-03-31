@@ -20,7 +20,7 @@ const (
 )
 
 type Services struct {
-	URLService URLShortener
+	URLService *URLService
 }
 
 func Factory(conn any, sType ServiceType, logger *logrus.Logger) (*Services, error) {

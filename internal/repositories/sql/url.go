@@ -27,6 +27,7 @@ func (u *URLRepo) Create(sURL *models.URL) error {
 		if strings.Contains(err.Error(), "duplicate") {
 			return repositories.ErrDuplicateKey
 		}
+		u.logger.WithError(err).Errorf("failed to create record %+v", *sURL)
 		return repositories.ErrUnknown
 	}
 	return nil
@@ -38,6 +39,7 @@ func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, repositories.ErrNotFound
 		}
+		u.logger.WithError(err).Errorf("failed to get record by short identifier %s", shortID)
 		return nil, errors.Wrapf(err, "failed to get record by short identifier %s", shortID)
 	}
 	return &url, nil

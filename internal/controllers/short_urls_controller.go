@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/fsdevblog/shorturl/internal/apperrs"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/services"
 
@@ -34,14 +33,14 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 	sIdentifier := ctx.Param("shortID")
 
 	if len(sIdentifier) != models.ShortIdentifierLength {
-		ctx.String(http.StatusNotFound, apperrs.ErrRecordNotFound.Error())
+		ctx.String(http.StatusNotFound, ErrRecordNotFound.Error())
 		return
 	}
 
 	sURL, err := s.urlService.GetByShortIdentifier(sIdentifier)
 
 	if err != nil {
-		if errors.Is(err, apperrs.ErrRecordNotFound) {
+		if errors.Is(err, services.ErrRecordNotFound) {
 			ctx.String(http.StatusNotFound, err.Error())
 			return
 		}
@@ -57,7 +56,7 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
 	body, readErr := io.ReadAll(ctx.Request.Body)
 	if readErr != nil {
-		ctx.String(http.StatusInternalServerError, apperrs.ErrInternal.Error())
+		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
 		return
 	}
 

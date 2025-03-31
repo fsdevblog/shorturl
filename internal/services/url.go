@@ -4,7 +4,6 @@ import (
 	"crypto/md5" //nolint:gosec
 	"encoding/base64"
 
-	"github.com/fsdevblog/shorturl/internal/apperrs"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
 
@@ -33,9 +32,9 @@ func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	sURL, err := u.urlRepo.GetByShortIdentifier(shortID)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
-			return nil, apperrs.ErrRecordNotFound
+			return nil, errors.Wrapf(ErrRecordNotFound, "id %s not found", shortID)
 		}
-		return nil, apperrs.ErrInternal
+		return nil, ErrUnknown
 	}
 	return sURL, nil
 }
@@ -61,7 +60,7 @@ func (u *urlService) Create(rawURL string) (*models.URL, error) {
 	var sURL models.URL
 	for {
 		if delta >= deltaMax {
-			return nil, errors.Wrap(apperrs.ErrInternal, "generateShortID loop limit for url")
+			return nil, errors.Wrap(ErrUnknown, "generateShortID loop limit for url")
 		}
 		sURL = models.URL{
 			URL:             rawURL,
@@ -72,7 +71,7 @@ func (u *urlService) Create(rawURL string) (*models.URL, error) {
 				delta++
 				continue
 			}
-			return nil, apperrs.ErrInternal
+			return nil, ErrUnknown
 		}
 		return &sURL, nil
 	}

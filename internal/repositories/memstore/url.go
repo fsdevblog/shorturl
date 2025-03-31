@@ -26,7 +26,8 @@ func (u *URLRepo) Create(sURL *models.URL) error {
 		if errors.Is(err, memory.ErrDuplicateKey) {
 			return repositories.ErrDuplicateKey
 		}
-		return errors.Wrapf(repositories.ErrUnknown, "failed to create record %+v", *sURL)
+		u.logger.WithError(err).Errorf("failed to create record %+v", *sURL)
+		return repositories.ErrUnknown
 	}
 	return nil
 }

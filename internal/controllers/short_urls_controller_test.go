@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fsdevblog/shorturl/internal/apperrs"
+	"github.com/fsdevblog/shorturl/internal/services"
+
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/services/smocks"
@@ -82,7 +83,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil)
 
 	s.urlServMock.On("GetByShortIdentifier", notExistShortID).
-		Return(nil, apperrs.ErrRecordNotFound)
+		Return(nil, services.ErrRecordNotFound)
 
 	tests := []struct {
 		name       string
@@ -101,7 +102,8 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 
 			defer res.Body.Close()
 
-			s.Equal(tt.wantStatus, res.StatusCode)
+			body, _ := io.ReadAll(res.Body)
+			s.Equal(tt.wantStatus, res.StatusCode, "Answer:", string(body))
 			if tt.wantStatus == http.StatusTemporaryRedirect {
 				s.Equal(redirectTo, res.Header.Get("Location"))
 			} else {

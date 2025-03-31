@@ -5,7 +5,6 @@ import (
 	"github.com/fsdevblog/shorturl/internal/db/memory"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
-	"github.com/fsdevblog/shorturl/internal/utils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -22,8 +21,14 @@ func NewURLRepo(store *db.MemoryStorage, logger *logrus.Logger) *URLRepo {
 	}
 }
 
-func (u *URLRepo) Create(rawURL string) (*models.URL, error) {
-	return u.recursiveCreate(rawURL, 1)
+func (u *URLRepo) Create(sURL *models.URL) error {
+	if err := memory.Set[models.URL](sURL.ShortIdentifier, *sURL, u.s.MStorage); err != nil {
+		if errors.Is(err, memory.ErrDuplicateKey) {
+			return repositories.ErrDuplicateKey
+		}
+		return errors.Wrapf(repositories.ErrUnknown, "failed to create record %+v", *sURL)
+	}
+	return nil
 }
 
 func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
@@ -47,44 +52,4 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 		}
 	}
 	return nil, repositories.ErrNotFound
-}
-
-// recursiveCreate вспомогательная рекурсивная функция, возвращает модель с хешем ссылки в обход коллизии.
-// Параметр `delta` служит для создания соли хеша и инкрементится с каждой рекурсией.
-func (u *URLRepo) recursiveCreate(rawURL string, delta uint) (*models.URL, error) {
-	shortID := utils.GenerateShortID(rawURL, delta, models.ShortIdentifierLength)
-	existingURL, getErr := memory.Get[models.URL](shortID, u.s.MStorage)
-	var maxDelta uint = 10
-	// если ошибка отличная от ErrNotFound, возвращаем её
-	if getErr != nil && !errors.Is(getErr, memory.ErrNotFound) {
-		return nil, getErr
-	}
-
-	if existingURL != nil {
-		// если запись уже имеется и нет коллизии, возвращаем
-		if existingURL.URL == rawURL {
-			return existingURL, nil
-		}
-
-		// если запись имеется, но обнаружена коллизия - инкрементим дельту и вызываем рекурсию
-		if existingURL.URL != rawURL {
-			// обезопасимся от вечной рекурсии
-			if delta >= maxDelta {
-				u.logger.Errorf("generateShortIdentifier loop limit for url %s", rawURL)
-				return nil, repositories.ErrUnknown
-			}
-			delta++
-			return u.recursiveCreate(rawURL, delta)
-		}
-	}
-
-	url := models.URL{
-		ID:              uint(u.s.Len() + 1), //nolint:gosec
-		URL:             rawURL,
-		ShortIdentifier: shortID,
-	}
-	if createErr := memory.Set[models.URL](shortID, url, u.s.MStorage); createErr != nil {
-		return nil, createErr
-	}
-	return &url, nil
 }

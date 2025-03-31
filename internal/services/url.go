@@ -1,7 +1,8 @@
 package services
 
 import (
-	"strings"
+	"crypto/md5" //nolint:gosec
+	"encoding/base64"
 
 	"github.com/fsdevblog/shorturl/internal/apperrs"
 	"github.com/fsdevblog/shorturl/internal/models"
@@ -12,7 +13,7 @@ import (
 
 type URLRepository interface {
 	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
-	Create(rawURL string) (*models.URL, error)
+	Create(rawURL *models.URL) error
 	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
 	GetByShortIdentifier(shortID string) (*models.URL, error)
 	// GetByURL находит запись в хранилище по заданной ссылке
@@ -22,6 +23,10 @@ type URLRepository interface {
 // urlService Сервис работает с базой данных в контексте таблицы `urls`.
 type urlService struct {
 	urlRepo URLRepository
+}
+
+func NewURLService(urlRepo URLRepository) URLShortener {
+	return &urlService{urlRepo: urlRepo}
 }
 
 func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
@@ -36,14 +41,51 @@ func (u *urlService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 }
 
 func (u *urlService) Create(rawURL string) (*models.URL, error) {
-	record, err := u.urlRepo.Create(strings.TrimSpace(rawURL))
-	if err != nil {
-		return nil, apperrs.ErrInternal
+	// Мы не можем делать вставку и проверять по ошибке дубликата. Проблема в том, что может быть дубликат как в URL,
+	// так и в хеше (коллизия), поэтому сначала мы делаем проверку на существование URL, а только потом делаем
+	// вставку
+
+	// В данной реализации не используется система транзакций, т.к. я не знаю как это сделать в моем случае.
+	// (не уверен что понимаю как провести транзакции в сервисный слой не высовывая при этом наружу тот самый *gorm.DB,
+	// но ещё больше я не уверен в том как реализовать систему транзакция в картах.
+	// Но она (система транзакций) тут явно нужна по идее.
+
+	existingURL, existingURLErr := u.urlRepo.GetByURL(rawURL)
+	if existingURLErr == nil {
+		return existingURL, nil
 	}
 
-	return record, nil
+	var delta uint = 1
+	var deltaMax uint = 10
+
+	var sURL models.URL
+	for {
+		if delta >= deltaMax {
+			return nil, errors.Wrap(apperrs.ErrInternal, "generateShortID loop limit for url")
+		}
+		sURL = models.URL{
+			URL:             rawURL,
+			ShortIdentifier: generateShortID(rawURL, delta, models.ShortIdentifierLength),
+		}
+		if createErr := u.urlRepo.Create(&sURL); createErr != nil {
+			if errors.Is(createErr, repositories.ErrDuplicateKey) {
+				delta++
+				continue
+			}
+			return nil, apperrs.ErrInternal
+		}
+		return &sURL, nil
+	}
 }
 
-func NewURLService(urlRepo URLRepository) URLShortener {
-	return &urlService{urlRepo: urlRepo}
+// generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.
+func generateShortID(rawURL string, delta uint, length int) string {
+	// Добавляем счетчик к срезу (для избежания коллизий)
+	b := []byte(rawURL)
+	b = append(b, byte(delta))
+
+	// Создаем хеш и конвертим в base62
+	hash := md5.Sum(b) //nolint:gosec
+	base62 := base64.URLEncoding.EncodeToString(hash[:])
+	return base62[:length]
 }

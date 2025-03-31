@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/fsdevblog/shorturl/internal/db"
 	"github.com/fsdevblog/shorturl/internal/repositories/memstore"
@@ -25,16 +26,15 @@ type Services struct {
 func Factory(conn any, sType ServiceType, logger *logrus.Logger) (*Services, error) {
 	switch sType {
 	case ServiceTypeSQLite:
-		var gormDB *gorm.DB
-		var ok bool
-		if gormDB, ok = conn.(*gorm.DB); !ok {
-			return nil, errors.New("invalid connection. expected *gorm.DB")
+		gormDB, ok := conn.(*gorm.DB)
+		if !ok {
+			return nil, errors.New("invalid connection type. expected *gorm.DB")
 		}
 		return getSQLServices(gormDB, logger), nil
 	case ServiceTypeInMemory:
 		return getInMemoryServices(logger), nil
 	default:
-		return nil, errors.New("unknown service type")
+		return nil, fmt.Errorf("unknown service type: %s", sType)
 	}
 }
 

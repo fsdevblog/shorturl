@@ -24,6 +24,14 @@ func (m *MStorage) Len() int {
 	return len(m.data)
 }
 
+func (m *MStorage) IsExist(key string) bool {
+	m.m.RLock()
+	defer m.m.RUnlock()
+
+	_, ok := m.data[key]
+	return ok
+}
+
 func Get[T any](key string, m *MStorage) (*T, error) {
 	m.m.RLock()
 	defer m.m.RUnlock()
@@ -39,7 +47,11 @@ func Get[T any](key string, m *MStorage) (*T, error) {
 	return &result, nil
 }
 
+// Set Сохраняет новые пары ключ/значение. Ключ обязан быть уникальным, иначе вернется ошибка ErrDuplicateKey.
 func Set[T any](key string, val T, m *MStorage) error {
+	if m.IsExist(key) {
+		return ErrDuplicateKey
+	}
 	m.m.Lock()
 	defer m.m.Unlock()
 

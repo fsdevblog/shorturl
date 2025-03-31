@@ -12,6 +12,7 @@ func main() {
 
 	a := app.Must(app.New(appConf))
 
+	appConf.Logger.Debugf("Starting server with config %+v", appConf)
 	if err := a.Run(); err != nil {
 		panic(err)
 	}

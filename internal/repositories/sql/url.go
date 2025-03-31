@@ -5,8 +5,6 @@ import (
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
-	"github.com/fsdevblog/shorturl/internal/utils"
-
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -24,64 +22,14 @@ func NewURLRepo(db *gorm.DB, logger *logrus.Logger) *URLRepo {
 	}
 }
 
-func (u *URLRepo) Create(rawURL string) (*models.URL, error) {
-	var sURL models.URL
-	var delta uint = 1
-	var deltaMax uint = 10
-
-	/*
-		Мы не можем использовать какой-нибудь метод GORM по типу FirstOrCreate так как помимо того
-		что ссылка уже может существовать в бд, еще может быть коллизия хеша (комбо 2 в 1),
-		поэтому приходится сначала проверять ручками, а затем создавать если приходится
-	*/
-
-	err := u.db.Transaction(func(tx *gorm.DB) error {
-		// если ссылка уже существует - возвращаем её
-		existingURL, existingErr := u.withTx(tx).GetByURL(rawURL)
-		if existingErr == nil {
-			sURL = *existingURL
-			return nil
+func (u *URLRepo) Create(sURL *models.URL) error {
+	if err := u.db.Create(sURL).Error; err != nil {
+		if strings.Contains(err.Error(), "duplicate") {
+			return repositories.ErrDuplicateKey
 		}
-
-		// Тут мы всегда ожидаем получить ошибку `gorm.ErrRecordNotFound`. Если любая другая - возвращаем её.
-		if !errors.Is(existingErr, gorm.ErrRecordNotFound) {
-			u.logger.WithError(existingErr).Error("checking is url exist error")
-			return repositories.ErrUnknown
-		}
-
-		// При генерации идентификатора могут возникать ошибки уникальности (коллизии и тд)
-		// в таких случаях мы добавляем к хешу счетчик
-
-		for {
-			// Обезопасимся от вечного цикла
-			if delta >= deltaMax {
-				u.logger.Errorf("generateShortIdentifier loop limit for url %s", rawURL)
-				return repositories.ErrUnknown
-			}
-
-			sURL = models.URL{
-				URL:             rawURL,
-				ShortIdentifier: utils.GenerateShortID(rawURL, delta, models.ShortIdentifierLength),
-			}
-			if err := tx.Create(&sURL).Error; err != nil {
-				// Тут мне самому не ясно, но проверка errors.Is на gorm.ErrDuplicatedKey - не работает
-				if strings.Contains(err.Error(), "duplicate") {
-					delta++
-					continue
-				}
-				u.logger.WithError(err).Errorf("failed to create url `%s`", rawURL)
-				return repositories.ErrUnknown
-			}
-			break
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, repositories.ErrTransaction
+		return repositories.ErrUnknown
 	}
-
-	return &sURL, nil
+	return nil
 }
 
 func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
@@ -105,9 +53,4 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 		return nil, repositories.ErrUnknown
 	}
 	return &url, nil
-}
-
-// withTx вспомогательный метод для работы с sql транзакциями.
-func (u *URLRepo) withTx(tx *gorm.DB) *URLRepo {
-	return NewURLRepo(tx, u.logger.Logger)
 }

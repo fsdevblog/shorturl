@@ -66,8 +66,6 @@ func loadsFlags(flagsConfig *Config) {
 
 // mergeConfig сливает структуры для env и флагов.
 func mergeConfig(envConfig, flagsConfig *Config) *Config {
-	logrus.Infof("env config: %+v", envConfig)
-	logrus.Infof("flags config: %+v", flagsConfig)
 	return &Config{
 		ServerAddress: defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
 		BaseURL:       defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),

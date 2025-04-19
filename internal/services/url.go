@@ -82,17 +82,21 @@ func (u *URLService) Create(rawURL string) (*models.URL, error) {
 	}
 }
 
-func (u *URLService) Backup(path string) error {
+func (u *URLService) Backup(path string) (err error) {
 	backupFile, backupFileErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if backupFileErr != nil {
 		return errors.Wrap(backupFileErr, "failed to open backup file")
 	}
 
-	defer backupFile.Close()
+	defer func() {
+		if errClose := backupFile.Close(); errClose != nil {
+			err = errors.Wrap(errClose, "failed to close backup file")
+		}
+	}()
 
-	records, err := u.urlRepo.GetAll()
-	if err != nil {
-		return errors.Wrap(err, "failed to get all records for backup")
+	records, recordsErr := u.urlRepo.GetAll()
+	if recordsErr != nil {
+		return errors.Wrap(recordsErr, "failed to get all records for backup")
 	}
 	for _, record := range records {
 		j, e := json.Marshal(&record)
@@ -108,23 +112,27 @@ func (u *URLService) Backup(path string) error {
 	return nil
 }
 
-func (u *URLService) RestoreBackup(path string) error {
+func (u *URLService) RestoreBackup(path string) (err error) {
 	file, fileErr := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
 	if fileErr != nil {
 		return errors.Wrap(fileErr, "failed to open backup file")
 	}
-	defer file.Close()
+	defer func() {
+		if errClose := file.Close(); errClose != nil {
+			err = errors.Wrap(errClose, "failed to close backup file")
+		}
+	}()
 
 	// Читаем построчно
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		var record models.URL
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return errors.Wrap(err, "failed to unmarshal record")
+		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			return errors.Wrap(jsonErr, "failed to unmarshal record")
 		}
-		if err := u.urlRepo.Create(&record); err != nil {
-			if !errors.Is(err, repositories.ErrDuplicateKey) {
-				return errors.Wrap(err, "failed to create record")
+		if createErr := u.urlRepo.Create(&record); createErr != nil {
+			if !errors.Is(createErr, repositories.ErrDuplicateKey) {
+				return errors.Wrap(createErr, "failed to create record")
 			}
 		}
 	}

@@ -39,7 +39,11 @@ func writeGzip(ctx *gin.Context) {
 	ctx.Header("Vary", "Accept-Encoding")
 
 	gzw := gzip.NewWriter(ctx.Writer)
-	defer gzw.Close()
+	defer func() {
+		if closeErr := gzw.Close(); closeErr != nil {
+			_ = ctx.Error(errors.Wrapf(closeErr, "close gzip writer error"))
+		}
+	}()
 
 	gzWriter := &gzipWriter{
 		ResponseWriter: ctx.Writer,
@@ -65,7 +69,11 @@ func readGzip(ctx *gin.Context) {
 			ctx.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-		defer gzReader.Close()
+		defer func() {
+			if closeErr := gzReader.Close(); closeErr != nil {
+				_ = ctx.Error(errors.Wrapf(closeErr, "close gzip reader error"))
+			}
+		}()
 		bodyBytes, err := io.ReadAll(gzReader)
 		if err != nil {
 			_ = ctx.Error(errors.Wrapf(err, "read decompressed request body error"))

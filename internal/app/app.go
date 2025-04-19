@@ -73,11 +73,11 @@ func (a *App) Run() error {
 
 	<-quit
 	// Делаем бекап
-	a.config.Logger.Infof("Making backup to file `%s`", a.config.FileStoragePath)
 	if backupErr := a.dbServices.URLService.Backup(a.config.FileStoragePath); backupErr != nil {
-		a.config.Logger.WithError(backupErr).Error("backup error")
+		a.config.Logger.WithError(backupErr).
+			Errorf("Making backup to file `%s` error", a.config.FileStoragePath)
 	} else {
-		a.config.Logger.Info("Backup done")
+		a.config.Logger.Infof("Successfully made backup to file `%s`", a.config.FileStoragePath)
 	}
 
 	// ошибка заполняется внутри горутины запуска сервера.

@@ -19,7 +19,7 @@ func NewSQLite(dbPath string) (*gorm.DB, error) {
 }
 
 func connectSQLite(dbPath string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to connect to sql db `%s`", dbPath)
 	}

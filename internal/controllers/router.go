@@ -15,5 +15,8 @@ func SetupRouter(urlService URLShortener, appConf *config.Config) *gin.Engine {
 	r.GET("/:shortID", shortURLController.Redirect)
 	r.POST("/", shortURLController.CreateShortURL)
 
+	api := r.Group("/api")
+	api.POST("/shorten", shortURLController.CreateShortURL)
+	api.GET("/:shortID", shortURLController.Redirect)
 	return r
 }

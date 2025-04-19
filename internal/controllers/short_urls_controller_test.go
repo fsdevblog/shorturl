@@ -21,6 +21,13 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+type ContentType string
+
+const (
+	JSONContentType           ContentType = "json"
+	FormURLEncodedContentType ContentType = "urlencoded"
+)
+
 type ShortURLControllerSuite struct {
 	suite.Suite
 	urlServMock *smocks.URLMock
@@ -55,20 +62,49 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
 		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
 	}
-	for _, tt := range tests {
-		s.Run(tt.name, func() {
-			res := s.makeRequest(http.MethodPost, "/", strings.NewReader(tt.redirectTo))
 
-			defer res.Body.Close()
+	jsonFn := func(to string) io.Reader {
+		jsonStr := fmt.Sprintf(`{"url": "%s"}`, to)
+		return strings.NewReader(jsonStr)
+	}
+	bodyFn := func(to string) io.Reader {
+		return strings.NewReader(to)
+	}
+	requests := []struct {
+		rType       ContentType
+		uri         string
+		contentType string
+		bodyFn      func(to string) io.Reader
+	}{
+		{rType: JSONContentType, uri: "/api/shorten", contentType: "application/json", bodyFn: jsonFn},
+		{rType: FormURLEncodedContentType, uri: "/", contentType: "application/x-www-form-urlencoded", bodyFn: bodyFn},
+	}
+	for _, r := range requests {
+		for _, tt := range tests {
+			s.Run(tt.name, func() {
+				res := s.makeRequest(requestFields{
+					Method:      http.MethodPost,
+					URL:         r.uri,
+					Body:        r.bodyFn(tt.redirectTo),
+					ContentType: r.contentType,
+				})
 
-			s.Equal(tt.wantStatus, res.StatusCode)
+				defer res.Body.Close()
 
-			if tt.wantStatus == http.StatusCreated {
-				body, _ := io.ReadAll(res.Body)
-				shortURL := fmt.Sprintf("%s/%s", s.config.BaseURL.String(), shortIdentifier)
-				s.Equal(shortURL, string(body))
-			}
-		})
+				s.Equal(tt.wantStatus, res.StatusCode)
+
+				if tt.wantStatus == http.StatusCreated {
+					body, _ := io.ReadAll(res.Body)
+					var shortURL string
+					if r.rType == JSONContentType {
+						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL.String(), shortIdentifier)
+					} else {
+						shortURL = fmt.Sprintf("%s/%s", s.config.BaseURL.String(), shortIdentifier)
+					}
+					s.Equal(shortURL, string(body))
+				}
+			})
+		}
 	}
 }
 
@@ -98,7 +134,10 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			res := s.makeRequest(http.MethodGet, "/"+tt.requestURI, nil)
+			res := s.makeRequest(requestFields{
+				Method: http.MethodGet,
+				URL:    "/" + tt.requestURI,
+			})
 
 			defer res.Body.Close()
 
@@ -150,9 +189,19 @@ func (s *ShortURLControllerSuite) Test_validateURL() {
 	}
 }
 
+type requestFields struct {
+	Method      string
+	URL         string
+	Body        io.Reader
+	ContentType string
+}
+
 // makeRequest вспомогательная функция создающая тестовый http запрос.
-func (s *ShortURLControllerSuite) makeRequest(method, url string, body io.Reader) *http.Response {
-	request := httptest.NewRequest(method, url, body)
+func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Response {
+	request := httptest.NewRequest(fields.Method, fields.URL, fields.Body)
+	if fields.ContentType != "" {
+		request.Header.Set("Content-Type", fields.ContentType)
+	}
 	recorder := httptest.NewRecorder()
 
 	s.router.ServeHTTP(recorder, request)

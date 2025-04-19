@@ -17,10 +17,11 @@ func loggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 
 		statusCode := c.Writer.Status()
 		l := logger.WithFields(logrus.Fields{
-			"URI":     c.Request.RequestURI,
-			"latency": fmt.Sprintf("%d ms", latency.Milliseconds()),
-			"status":  statusCode,
-			"method":  c.Request.Method,
+			"URI":          c.Request.RequestURI,
+			"latency":      fmt.Sprintf("%d ms", latency.Milliseconds()),
+			"status":       statusCode,
+			"method":       c.Request.Method,
+			"content-type": c.Request.Header.Get("Content-Type"),
 		})
 		errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
 

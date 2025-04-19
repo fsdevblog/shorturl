@@ -50,6 +50,7 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 			return
 		}
 
+		_ = ctx.Error(err)
 		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}

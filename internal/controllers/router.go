@@ -9,6 +9,7 @@ func SetupRouter(urlService URLShortener, appConf *config.Config) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(loggerMiddleware(appConf.Logger))
+	r.Use(gzipMiddleware())
 
 	shortURLController := NewShortURLController(urlService, appConf.BaseURL)
 

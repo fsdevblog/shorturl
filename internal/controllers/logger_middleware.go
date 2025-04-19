@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// loggerMiddleware должен быть первый в стеке миддлваре.
 func loggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -17,11 +18,12 @@ func loggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 
 		statusCode := c.Writer.Status()
 		l := logger.WithFields(logrus.Fields{
-			"URI":          c.Request.RequestURI,
-			"latency":      fmt.Sprintf("%d ms", latency.Milliseconds()),
-			"status":       statusCode,
-			"method":       c.Request.Method,
-			"content-type": c.Request.Header.Get("Content-Type"),
+			"URI":              c.Request.RequestURI,
+			"latency":          fmt.Sprintf("%d ms", latency.Milliseconds()),
+			"status":           statusCode,
+			"method":           c.Request.Method,
+			"content-type":     c.Request.Header.Get("Content-Type"),
+			"content-encoding": c.Request.Header.Get("Content-Encoding"),
 		})
 		errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
 

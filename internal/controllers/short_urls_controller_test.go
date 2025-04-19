@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,11 +23,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ContentType string
+type CType string
 
 const (
-	JSONContentType           ContentType = "json"
-	FormURLEncodedContentType ContentType = "urlencoded"
+	JSONCType   CType = "json"
+	URLEncCType CType = "urlencoded"
 )
 
 type ShortURLControllerSuite struct {
@@ -46,6 +48,7 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	s.router = SetupRouter(s.urlServMock, &appConf)
 }
 
+//nolint:gocognit
 func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
 	invalidURL := "https://test .com/valid"
@@ -71,13 +74,16 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 		return strings.NewReader(to)
 	}
 	requests := []struct {
-		rType       ContentType
+		rType       CType
 		uri         string
 		contentType string
 		bodyFn      func(to string) io.Reader
+		gzip        bool
 	}{
-		{rType: JSONContentType, uri: "/api/shorten", contentType: "application/json", bodyFn: jsonFn},
-		{rType: FormURLEncodedContentType, uri: "/", contentType: "application/x-www-form-urlencoded", bodyFn: bodyFn},
+		{rType: JSONCType, uri: "/api/shorten", contentType: "application/json", bodyFn: jsonFn, gzip: true},
+		{rType: JSONCType, uri: "/api/shorten", contentType: "application/json", bodyFn: jsonFn, gzip: false},
+		{rType: URLEncCType, uri: "/", contentType: "application/x-www-form-urlencoded", bodyFn: bodyFn, gzip: true},
+		{rType: URLEncCType, uri: "/", contentType: "application/x-www-form-urlencoded", bodyFn: bodyFn, gzip: false},
 	}
 	for _, r := range requests {
 		for _, tt := range tests {
@@ -87,6 +93,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 					URL:         r.uri,
 					Body:        r.bodyFn(tt.redirectTo),
 					ContentType: r.contentType,
+					Gzipped:     r.gzip,
 				})
 
 				defer res.Body.Close()
@@ -94,14 +101,22 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 				s.Equal(tt.wantStatus, res.StatusCode)
 
 				if tt.wantStatus == http.StatusCreated {
-					body, _ := io.ReadAll(res.Body)
+					body, bErr := readBody(res.Body, r.gzip)
+
+					if bErr != nil {
+						s.T().Fatalf("failed to read body: %v", bErr)
+					}
 					var shortURL string
-					if r.rType == JSONContentType {
+					if r.rType == JSONCType {
 						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL.String(), shortIdentifier)
 					} else {
 						shortURL = fmt.Sprintf("%s/%s", s.config.BaseURL.String(), shortIdentifier)
 					}
 					s.Equal(shortURL, string(body))
+				}
+
+				if r.gzip {
+					s.Equal("gzip", res.Header.Get("Content-Encoding"))
 				}
 			})
 		}
@@ -194,14 +209,45 @@ type requestFields struct {
 	URL         string
 	Body        io.Reader
 	ContentType string
+	Gzipped     bool
 }
 
 // makeRequest вспомогательная функция создающая тестовый http запрос.
 func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Response {
-	request := httptest.NewRequest(fields.Method, fields.URL, fields.Body)
+	var body io.Reader
+	if fields.Body != nil {
+		body = fields.Body
+	}
+
+	// Добавляем gzip сжатие тела запроса, если надо.
+	if fields.Gzipped && fields.Body != nil {
+		var gzipBuffer bytes.Buffer
+		gzipW, gzErr := gzip.NewWriterLevel(&gzipBuffer, gzip.BestSpeed)
+		if gzErr != nil {
+			s.T().Fatalf("failed to create gzip writer: %v", gzErr)
+		}
+
+		// копируем тело в gzip.Writer.
+		_, copyErr := io.Copy(gzipW, fields.Body)
+		if copyErr != nil {
+			s.T().Fatalf("failed to copy request body to gzip writer: %v", copyErr)
+		}
+
+		if err := gzipW.Close(); err != nil {
+			s.T().Fatalf("failed to close gzip writer: %v", err)
+		}
+		body = &gzipBuffer
+	}
+
+	request := httptest.NewRequest(fields.Method, fields.URL, body)
 	if fields.ContentType != "" {
 		request.Header.Set("Content-Type", fields.ContentType)
 	}
+	if fields.Gzipped {
+		request.Header.Set("Content-Encoding", "gzip")
+		request.Header.Set("Accept-Encoding", "gzip")
+	}
+
 	recorder := httptest.NewRecorder()
 
 	s.router.ServeHTTP(recorder, request)
@@ -211,4 +257,36 @@ func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Respon
 
 func TestShortURLControllerSuite(t *testing.T) {
 	suite.Run(t, new(ShortURLControllerSuite))
+}
+
+func unGzip(r io.Reader) ([]byte, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+
+	body, err := io.ReadAll(gzr)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+// readBody Читает тело запроса, если тело сжатое - расжимает.
+func readBody(r io.Reader, compressed bool) ([]byte, error) {
+	var body []byte
+	var bErr error
+	if compressed {
+		body, bErr = unGzip(r)
+		if bErr != nil {
+			return nil, bErr
+		}
+		return body, nil
+	}
+	body, bErr = io.ReadAll(r)
+	if bErr != nil {
+		return nil, bErr
+	}
+	return body, nil
 }

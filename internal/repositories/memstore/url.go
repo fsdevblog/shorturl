@@ -54,3 +54,7 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	}
 	return nil, repositories.ErrNotFound
 }
+
+func (u *URLRepo) GetAll() ([]models.URL, error) {
+	return memory.GetAll[models.URL](u.s.MStorage), nil
+}

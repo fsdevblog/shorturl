@@ -44,3 +44,12 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	}
 	return &url, nil
 }
+
+func (u *URLRepo) GetAll() ([]models.URL, error) {
+	var urls []models.URL
+	if err := u.db.Find(&urls).Error; err != nil {
+		u.logger.WithError(err).Errorf("failed to get all records")
+		return nil, ConvertErrorType(err)
+	}
+	return urls, nil
+}

@@ -6,8 +6,6 @@ import (
 )
 
 func main() {
-	// Конфиг также можно перенести в app, но мне кажется ему все же место main, т.к. конфиг может
-	// в будущем пригодится здесь.
 	appConf, confErr := config.LoadConfig()
 	if confErr != nil {
 		panic(confErr)

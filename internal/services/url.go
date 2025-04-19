@@ -1,8 +1,11 @@
 package services
 
 import (
+	"bufio"
 	"crypto/md5" //nolint:gosec
 	"encoding/base64"
+	"encoding/json"
+	"os"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
@@ -17,6 +20,8 @@ type URLRepository interface {
 	GetByShortIdentifier(shortID string) (*models.URL, error)
 	// GetByURL находит запись в хранилище по заданной ссылке
 	GetByURL(rawURL string) (*models.URL, error)
+	// GetAll возвращает все записи в бд. Сразу пачкой.
+	GetAll() ([]models.URL, error)
 }
 
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
@@ -75,6 +80,55 @@ func (u *URLService) Create(rawURL string) (*models.URL, error) {
 		}
 		return &sURL, nil
 	}
+}
+
+func (u *URLService) Backup(path string) error {
+	backupFile, backupFileErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if backupFileErr != nil {
+		return errors.Wrap(backupFileErr, "failed to open backup file")
+	}
+
+	defer backupFile.Close()
+
+	records, err := u.urlRepo.GetAll()
+	if err != nil {
+		return errors.Wrap(err, "failed to get all records for backup")
+	}
+	for _, record := range records {
+		j, e := json.Marshal(&record)
+		if e != nil {
+			return errors.Wrapf(e, "failed to marshal record %+v", records)
+		}
+		j = append(j, '\n')
+		_, wE := backupFile.Write(j)
+		if wE != nil {
+			return errors.Wrap(wE, "failed to write backup file")
+		}
+	}
+	return nil
+}
+
+func (u *URLService) RestoreBackup(path string) error {
+	file, fileErr := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
+	if fileErr != nil {
+		return errors.Wrap(fileErr, "failed to open backup file")
+	}
+	defer file.Close()
+
+	// Читаем построчно
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var record models.URL
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			return errors.Wrap(err, "failed to unmarshal record")
+		}
+		if err := u.urlRepo.Create(&record); err != nil {
+			if !errors.Is(err, repositories.ErrDuplicateKey) {
+				return errors.Wrap(err, "failed to create record")
+			}
+		}
+	}
+	return nil
 }
 
 // generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.

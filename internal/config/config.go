@@ -18,6 +18,7 @@ const (
 )
 
 type Config struct {
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	// Порт на котором запустится сервер
 	ServerAddress string `env:"SERVER_ADDRESS"`
 	// Базовый адрес результирующего сокращенного URL
@@ -45,6 +46,7 @@ func LoadConfig() (*Config, error) {
 // loadsFlags парсит флаги командной строки.
 func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
+	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
 
 	bDesc := "Базовый адрес результирующего сокращенного URL (по умолчанию Scheme://Host запущенного сервера)"
 	flag.Func("b", bDesc, func(rawURL string) error {
@@ -67,9 +69,10 @@ func loadsFlags(flagsConfig *Config) {
 // mergeConfig сливает структуры для env и флагов.
 func mergeConfig(envConfig, flagsConfig *Config) *Config {
 	return &Config{
-		ServerAddress: defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
-		BaseURL:       defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
-		DBType:        defaultIfBlank[DBType](envConfig.DBType, flagsConfig.DBType),
+		ServerAddress:   defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
+		BaseURL:         defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
+		DBType:          defaultIfBlank[DBType](envConfig.DBType, flagsConfig.DBType),
+		FileStoragePath: defaultIfBlank[string](envConfig.FileStoragePath, flagsConfig.FileStoragePath),
 	}
 }
 

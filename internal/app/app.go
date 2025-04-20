@@ -46,7 +46,7 @@ func (a *App) restoreBackup() error {
 }
 
 // Run запускает web сервер.
-func (a *App) Run() (serverErr error) { //nolint:nonamedreturns
+func (a *App) Run() error {
 	if restoreErr := a.restoreBackup(); restoreErr != nil {
 		return errors.Wrap(restoreErr, "run app error")
 	}
@@ -63,6 +63,7 @@ func (a *App) Run() (serverErr error) { //nolint:nonamedreturns
 		}
 	}()
 
+	var serverErr error
 	select {
 	case <-ctx.Done():
 		a.config.Logger.Info("Shutdown command received")

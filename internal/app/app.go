@@ -1,7 +1,7 @@
 package app
 
 import (
-	"os"
+	"context"
 	"os/signal"
 	"syscall"
 
@@ -51,26 +51,25 @@ func (a *App) Run() (serverErr error) { //nolint:nonamedreturns
 		return errors.Wrap(restoreErr, "run app error")
 	}
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
+	errChan := make(chan error, 1)
 	server := controllers.SetupRouter(a.dbServices.URLService, a.config)
 	go func() {
-		defer func() {
-			// если чан еще открыт, его нужно закрыть, чтоб приложение завершило свою работу.
-			_, isOpen := <-quit
-			if isOpen {
-				close(quit)
-			}
-		}()
 		if err := server.Run(a.config.ServerAddress); err != nil {
 			a.config.Logger.WithError(err).Error("server error")
-			// выставляем ошибку, чтоб вернуть её в main
-			serverErr = err
+			errChan <- err
 		}
 	}()
 
-	<-quit
+	select {
+	case <-ctx.Done():
+		a.config.Logger.Info("Shutdown command received")
+	case serverErr = <-errChan:
+		a.config.Logger.WithError(serverErr).Error("router error")
+	}
+
 	// Делаем бекап
 	if backupErr := a.dbServices.URLService.Backup(a.config.FileStoragePath); backupErr != nil {
 		a.config.Logger.WithError(backupErr).
@@ -79,7 +78,6 @@ func (a *App) Run() (serverErr error) { //nolint:nonamedreturns
 		a.config.Logger.Infof("Successfully made backup to file `%s`", a.config.FileStoragePath)
 	}
 
-	// ошибка заполняется внутри горутины запуска сервера.
 	return serverErr
 }
 

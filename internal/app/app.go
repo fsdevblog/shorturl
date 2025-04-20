@@ -46,7 +46,7 @@ func (a *App) restoreBackup() error {
 }
 
 // Run запускает web сервер.
-func (a *App) Run() error {
+func (a *App) Run() (serverErr error) { //nolint:nonamedreturns
 	if restoreErr := a.restoreBackup(); restoreErr != nil {
 		return errors.Wrap(restoreErr, "run app error")
 	}
@@ -55,7 +55,6 @@ func (a *App) Run() error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	server := controllers.SetupRouter(a.dbServices.URLService, a.config)
-	var serverErr error
 	go func() {
 		defer func() {
 			// если чан еще открыт, его нужно закрыть, чтоб приложение завершило свою работу.
@@ -81,10 +80,7 @@ func (a *App) Run() error {
 	}
 
 	// ошибка заполняется внутри горутины запуска сервера.
-	if serverErr != nil {
-		return serverErr
-	}
-	return nil
+	return serverErr
 }
 
 // initServices создает подключение к базе данных и возвращает сервисный слой приложения.

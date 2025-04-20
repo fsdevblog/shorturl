@@ -58,7 +58,6 @@ func (a *App) Run() error {
 	server := controllers.SetupRouter(a.dbServices.URLService, a.config)
 	go func() {
 		if err := server.Run(a.config.ServerAddress); err != nil {
-			a.config.Logger.WithError(err).Error("server error")
 			errChan <- err
 		}
 	}()

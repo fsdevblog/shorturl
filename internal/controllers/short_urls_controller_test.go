@@ -8,16 +8,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/fsdevblog/shorturl/internal/logs"
 
 	"github.com/fsdevblog/shorturl/internal/services"
 
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/services/smocks"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
@@ -42,10 +43,10 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	appConf := config.Config{
 		ServerAddress: ":80",
 		BaseURL:       &url.URL{Scheme: "http", Host: "test.com:8080"},
-		Logger:        logrus.New(),
 	}
 	s.config = &appConf
-	s.router = SetupRouter(s.urlServMock, &appConf)
+	logger := logs.New(os.Stdout)
+	s.router = SetupRouter(s.urlServMock, &appConf, logger)
 }
 
 //nolint:gocognit
@@ -96,7 +97,11 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 					Gzipped:     r.gzip,
 				})
 
-				defer res.Body.Close()
+				defer func() {
+					if err := res.Body.Close(); err != nil {
+						s.T().Fatal(err)
+					}
+				}()
 
 				s.Equal(tt.wantStatus, res.StatusCode)
 
@@ -154,7 +159,12 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 				URL:    "/" + tt.requestURI,
 			})
 
-			defer res.Body.Close()
+			// в тестах мне кажется можно опускать обработку Close.
+			defer func() {
+				if err := res.Body.Close(); err != nil {
+					s.T().Fatal(err)
+				}
+			}()
 
 			body, _ := io.ReadAll(res.Body)
 			s.Equal(tt.wantStatus, res.StatusCode, "Answer:", string(body))

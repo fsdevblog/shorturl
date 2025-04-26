@@ -2,14 +2,16 @@ package controllers
 
 import (
 	"github.com/fsdevblog/shorturl/internal/config"
+	"github.com/fsdevblog/shorturl/internal/controllers/middlewares"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
-func SetupRouter(urlService URLShortener, appConf *config.Config) *gin.Engine {
+func SetupRouter(urlService URLShortener, appConf *config.Config, l *logrus.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(loggerMiddleware(appConf.Logger))
-	r.Use(gzipMiddleware())
+	r.Use(middlewares.LoggerMiddleware(l))
+	r.Use(middlewares.GzipMiddleware())
 
 	shortURLController := NewShortURLController(urlService, appConf.BaseURL)
 

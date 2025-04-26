@@ -1,15 +1,16 @@
-package config
+package logs
 
 import (
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
 )
 
-// initLogger инициализирует логгер. В будущем сделаем его настраиваемым.
-func initLogger() *logrus.Logger {
+// New инициализирует логгер.
+func New(output io.Writer) *logrus.Logger {
 	logger := logrus.New()
-	logger.SetOutput(os.Stdout)
+	logger.SetOutput(output)
 
 	logger.SetFormatter(new(logrus.JSONFormatter))
 	logger.SetLevel(logrus.InfoLevel)

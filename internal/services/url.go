@@ -5,6 +5,7 @@ import (
 	"crypto/md5" //nolint:gosec
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/fsdevblog/shorturl/internal/models"
@@ -37,7 +38,7 @@ func (u *URLService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	sURL, err := u.urlRepo.GetByShortIdentifier(shortID)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
-			return nil, errors.Wrapf(ErrRecordNotFound, "id %s not found", shortID)
+			return nil, fmt.Errorf("id `%s` not found: %w", shortID, ErrRecordNotFound)
 		}
 		return nil, ErrUnknown
 	}
@@ -65,7 +66,7 @@ func (u *URLService) Create(rawURL string) (*models.URL, error) {
 	var sURL models.URL
 	for {
 		if delta >= deltaMax {
-			return nil, errors.Wrap(ErrUnknown, "generateShortID loop limit for url")
+			return nil, fmt.Errorf("generateShortID loop limit for url: %w", ErrUnknown)
 		}
 		sURL = models.URL{
 			URL:             rawURL,
@@ -85,28 +86,28 @@ func (u *URLService) Create(rawURL string) (*models.URL, error) {
 func (u *URLService) Backup(path string) (err error) {
 	backupFile, backupFileErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if backupFileErr != nil {
-		return errors.Wrap(backupFileErr, "failed to open backup file")
+		return fmt.Errorf("open backup file: %w", backupFileErr)
 	}
 
 	defer func() {
 		if errClose := backupFile.Close(); errClose != nil {
-			err = errors.Wrap(errClose, "failed to close backup file")
+			err = fmt.Errorf("close backup file: %w", errClose)
 		}
 	}()
 
 	records, recordsErr := u.urlRepo.GetAll()
 	if recordsErr != nil {
-		return errors.Wrap(recordsErr, "failed to get all records for backup")
+		return fmt.Errorf("get all records for backup: %w", recordsErr)
 	}
 	for _, record := range records {
 		j, e := json.Marshal(&record)
 		if e != nil {
-			return errors.Wrapf(e, "failed to marshal record %+v", records)
+			return fmt.Errorf("marshal record %+v: %w", records, e)
 		}
 		j = append(j, '\n')
 		_, wE := backupFile.Write(j)
 		if wE != nil {
-			return errors.Wrap(wE, "failed to write backup file")
+			return fmt.Errorf("write backup file: %w", wE)
 		}
 	}
 	return nil
@@ -115,11 +116,11 @@ func (u *URLService) Backup(path string) (err error) {
 func (u *URLService) RestoreBackup(path string) (err error) {
 	file, fileErr := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
 	if fileErr != nil {
-		return errors.Wrap(fileErr, "failed to open backup file")
+		return fmt.Errorf("open backup file: %w", fileErr)
 	}
 	defer func() {
 		if errClose := file.Close(); errClose != nil {
-			err = errors.Wrap(errClose, "failed to close backup file")
+			err = fmt.Errorf("close backup file: %w", errClose)
 		}
 	}()
 
@@ -127,12 +128,12 @@ func (u *URLService) RestoreBackup(path string) (err error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		var record models.URL
-		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return errors.Wrap(jsonErr, "failed to unmarshal record")
+		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); jsonErr != nil {
+			return fmt.Errorf("unmarshal record: %w", jsonErr)
 		}
 		if createErr := u.urlRepo.Create(&record); createErr != nil {
 			if !errors.Is(createErr, repositories.ErrDuplicateKey) {
-				return errors.Wrap(createErr, "failed to create record")
+				return fmt.Errorf("create record: %w", createErr)
 			}
 		}
 	}

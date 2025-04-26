@@ -98,22 +98,15 @@ func (s *ShortURLController) bindCreateParams(ctx *gin.Context) (*createParams, 
 	var params createParams
 	body, readErr := io.ReadAll(ctx.Request.Body)
 	if readErr != nil {
-		_ = ctx.Error(errors.Wrap(readErr, "failed to read request body"))
+		_ = ctx.Error(fmt.Errorf("bind params: %w", readErr))
 		return nil, ErrInternal
 	}
 
 	if !isJSONRequest(ctx) {
 		params.URL = string(body)
 	} else {
-		// нужно байндить самому, что автотесты пробегались... (
-
-		// if bindErr := ctx.ShouldBindJSON(&params); bindErr != nil {
-		//	_ = ctx.Error(errors.Wrap(bindErr, "failed to bind json"))
-		//	return nil, bindErr
-		//}
-
 		if jsonErr := json.Unmarshal(body, &params); jsonErr != nil {
-			_ = ctx.Error(errors.Wrap(jsonErr, "error binding json"))
+			_ = ctx.Error(fmt.Errorf("bind params: %w", jsonErr))
 			return nil, ErrInternal
 		}
 	}

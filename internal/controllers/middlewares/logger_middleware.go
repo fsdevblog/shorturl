@@ -1,4 +1,4 @@
-package controllers
+package middlewares
 
 import (
 	"fmt"
@@ -9,9 +9,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// loggerMiddleware должен быть первый в стеке миддлваре.
-func loggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
+// LoggerMiddleware должен быть первый в стеке миддлваре.
+func LoggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if logger == nil {
+			c.Next()
+			return
+		}
+
 		start := time.Now()
 		c.Next()
 		latency := time.Since(start)

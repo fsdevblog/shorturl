@@ -1,15 +1,15 @@
-package controllers
+package middlewares
 
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 )
 
 type gzipWriter struct {
@@ -21,7 +21,7 @@ func (g *gzipWriter) Write(data []byte) (int, error) {
 	return g.writer.Write(data) //nolint:wrapcheck
 }
 
-func gzipMiddleware() gin.HandlerFunc {
+func GzipMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		readGzip(ctx)
 		writeGzip(ctx)
@@ -41,7 +41,7 @@ func writeGzip(ctx *gin.Context) {
 	gzw := gzip.NewWriter(ctx.Writer)
 	defer func() {
 		if closeErr := gzw.Close(); closeErr != nil {
-			_ = ctx.Error(errors.Wrapf(closeErr, "close gzip writer error"))
+			_ = ctx.Error(fmt.Errorf("close gzip writer: %w", closeErr))
 		}
 	}()
 
@@ -65,18 +65,18 @@ func readGzip(ctx *gin.Context) {
 
 		gzReader, gzErr := gzip.NewReader(ctx.Request.Body)
 		if gzErr != nil {
-			_ = ctx.Error(errors.Wrapf(gzErr, "read request body error"))
+			_ = ctx.Error(fmt.Errorf("read gzip: %w", gzErr))
 			ctx.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 		defer func() {
 			if closeErr := gzReader.Close(); closeErr != nil {
-				_ = ctx.Error(errors.Wrapf(closeErr, "close gzip reader error"))
+				_ = ctx.Error(fmt.Errorf("close gzip reader: %w", closeErr))
 			}
 		}()
 		bodyBytes, err := io.ReadAll(gzReader)
 		if err != nil {
-			_ = ctx.Error(errors.Wrapf(err, "read decompressed request body error"))
+			_ = ctx.Error(fmt.Errorf("read gzip: %w", err))
 			ctx.AbortWithStatus(http.StatusBadRequest)
 			return
 		}

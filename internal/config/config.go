@@ -2,12 +2,10 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"net/url"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/caarlos0/env/v11"
-	"github.com/pkg/errors"
 )
 
 type DBType string
@@ -25,22 +23,29 @@ type Config struct {
 	BaseURL *url.URL `env:"BASE_URL"`
 	// Тип хранилища
 	DBType DBType `env:"DB" envDefault:"inMemory"` // через флаги не настраиваю, незачем
-	Logger *logrus.Logger
 }
 
 func LoadConfig() (*Config, error) {
 	var flagsConfig, envConfig Config
-	logger := initLogger()
 
 	if err := env.Parse(&envConfig); err != nil {
-		return nil, errors.Wrapf(err, "parse ENV config error")
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
 	loadsFlags(&flagsConfig)
 
 	conf := mergeConfig(&envConfig, &flagsConfig)
-	conf.Logger = logger
 	return conf, nil
+}
+
+// MustLoad возвращает панику если произошла ошибка.
+// Сделал отдельным методом по аналогии с библиотекой go-rod.
+func MustLoad() *Config {
+	conf, err := LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+	return conf
 }
 
 // loadsFlags парсит флаги командной строки.
@@ -52,7 +57,7 @@ func loadsFlags(flagsConfig *Config) {
 	flag.Func("b", bDesc, func(rawURL string) error {
 		parsedURL, err := url.ParseRequestURI(rawURL)
 		if err != nil {
-			return errors.Wrap(err, "failed to parse base url")
+			return fmt.Errorf("parse url: %w", err)
 		}
 
 		// создаем новый инстанс, отсекая тем самым Path и Query если они заданы в базовом урле.

@@ -1,8 +1,9 @@
 package sql
 
 import (
+	"fmt"
+
 	"github.com/fsdevblog/shorturl/internal/models"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -31,7 +32,7 @@ func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	var url models.URL
 	if err := u.db.Where("short_identifier = ?", shortID).First(&url).Error; err != nil {
 		u.logger.WithError(err).Errorf("failed to get record by short identifier %s", shortID)
-		return nil, ConvertErrorType(errors.Wrapf(err, "failed to get record by short identifier %s", shortID))
+		return nil, ConvertErrorType(fmt.Errorf("failed to get record by short identifier %s: %w", shortID, err))
 	}
 	return &url, nil
 }
@@ -40,7 +41,7 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	var url models.URL
 	if err := u.db.Where("url = ?", rawURL).First(&url).Error; err != nil {
 		u.logger.WithError(err).Errorf("failed to get record by raw url %s", rawURL)
-		return nil, ConvertErrorType(errors.Wrapf(err, "failed to get record by raw url %s", rawURL))
+		return nil, ConvertErrorType(fmt.Errorf("failed to get record by raw url %s: %w", rawURL, err))
 	}
 	return &url, nil
 }

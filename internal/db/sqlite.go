@@ -1,8 +1,9 @@
 package db
 
 import (
+	"fmt"
+
 	"github.com/fsdevblog/shorturl/internal/models"
-	"github.com/pkg/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -10,10 +11,10 @@ import (
 func NewSQLite(dbPath string) (*gorm.DB, error) {
 	conn, connErr := connectSQLite(dbPath)
 	if connErr != nil {
-		return nil, errors.Wrap(connErr, "init database error")
+		return nil, fmt.Errorf("init database error: %w", connErr)
 	}
 	if migrateErr := migrateSQLite(conn); migrateErr != nil {
-		return nil, errors.Wrap(migrateErr, "migrate database error")
+		return nil, fmt.Errorf("migrate database error: %w", migrateErr)
 	}
 	return conn, nil
 }
@@ -21,14 +22,14 @@ func NewSQLite(dbPath string) (*gorm.DB, error) {
 func connectSQLite(dbPath string) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{TranslateError: true})
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to connect to sql db `%s`", dbPath)
+		return nil, fmt.Errorf("connect database with path %s error: %w", dbPath, err)
 	}
 	return db, nil
 }
 
 func migrateSQLite(db *gorm.DB) error {
 	if err := db.AutoMigrate(&models.URL{}); err != nil {
-		return errors.Wrap(err, "migrating sql failed")
+		return fmt.Errorf("migrating sql: %w", err)
 	}
 	return nil
 }

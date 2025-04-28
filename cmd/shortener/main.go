@@ -6,16 +6,11 @@ import (
 )
 
 func main() {
-	// Конфиг также можно перенести в app, но мне кажется ему все же место main, т.к. конфиг может
-	// в будущем пригодится здесь.
-	appConf, confErr := config.LoadConfig()
-	if confErr != nil {
-		panic(confErr)
-	}
+	appConf := config.MustLoad()
 
 	a := app.Must(app.New(appConf))
 
-	appConf.Logger.Debugf("Starting server with config %+v", *appConf)
+	a.Logger.Debugf("Starting server with config %+v", *appConf)
 	if err := a.Run(); err != nil {
 		panic(err)
 	}

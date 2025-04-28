@@ -1,12 +1,12 @@
 package memory
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/goccy/go-json"
-	"github.com/pkg/errors"
 )
 
 type MStorage struct {
@@ -42,7 +42,7 @@ func Get[T any](key string, m *MStorage) (*T, error) {
 	}
 	var result T
 	if err := json.Unmarshal(val, &result); err != nil {
-		return nil, errors.Wrapf(err, "failed to unmarshal json by key `%s`", key)
+		return nil, fmt.Errorf("unmarshal by key %s: %w", key, err)
 	}
 	return &result, nil
 }
@@ -57,7 +57,7 @@ func Set[T any](key string, val *T, m *MStorage) error {
 
 	bytes, err := json.Marshal(val)
 	if err != nil {
-		return errors.Wrapf(err, "failed to marshal json for object `%+v`", val)
+		return fmt.Errorf("marshal %+v: %w", val, err)
 	}
 	m.data[key] = bytes
 	return nil

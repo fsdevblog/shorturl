@@ -1,12 +1,14 @@
 package controllers
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+
+	"github.com/pkg/errors"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/services"
@@ -50,6 +52,7 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 			return
 		}
 
+		_ = ctx.Error(err)
 		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -57,15 +60,19 @@ func (s *ShortURLController) Redirect(ctx *gin.Context) {
 	ctx.Redirect(http.StatusTemporaryRedirect, sURL.URL)
 }
 
-// CreateShortURL принимаем plain запрос со ссылкой.
+type createParams struct {
+	URL string `json:"url"`
+}
+
+// CreateShortURL создает ссылку.
 func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
-	body, readErr := io.ReadAll(ctx.Request.Body)
-	if readErr != nil {
-		ctx.String(http.StatusInternalServerError, ErrInternal.Error())
+	strongParams, err := s.bindCreateParams(ctx)
+	if err != nil {
+		ctx.String(http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
-	parsedURL, parseErr := validateURL(string(body))
+	parsedURL, parseErr := validateURL(strongParams.URL)
 
 	if parseErr != nil {
 		ctx.String(http.StatusUnprocessableEntity, parseErr.Error())
@@ -79,7 +86,31 @@ func (s *ShortURLController) CreateShortURL(ctx *gin.Context) {
 		return
 	}
 
-	ctx.String(http.StatusCreated, s.getShortURL(ctx.Request, sURL.ShortIdentifier))
+	if isJSONRequest(ctx) {
+		ctx.JSON(http.StatusCreated, gin.H{"result": s.getShortURL(ctx.Request, sURL.ShortIdentifier)})
+	} else {
+		ctx.String(http.StatusCreated, s.getShortURL(ctx.Request, sURL.ShortIdentifier))
+	}
+}
+
+// bindCreateParams байндит json или application/x-www-form-urlencoded запросы для создания ссылки.
+func (s *ShortURLController) bindCreateParams(ctx *gin.Context) (*createParams, error) {
+	var params createParams
+	body, readErr := io.ReadAll(ctx.Request.Body)
+	if readErr != nil {
+		_ = ctx.Error(fmt.Errorf("bind params: %w", readErr))
+		return nil, ErrInternal
+	}
+
+	if !isJSONRequest(ctx) {
+		params.URL = string(body)
+	} else {
+		if jsonErr := json.Unmarshal(body, &params); jsonErr != nil {
+			_ = ctx.Error(fmt.Errorf("bind params: %w", jsonErr))
+			return nil, ErrInternal
+		}
+	}
+	return &params, nil
 }
 
 // getShortURL вспомогательный метод который создает короткую ссылку.

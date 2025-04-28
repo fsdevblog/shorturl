@@ -10,6 +10,9 @@ TESTER=./cli/shortenertestbeta
 # Порт для тестового сервера авто-тестов
 SERVER_PORT=8080
 
+# Путь для файла бекапа
+FILE_STORAGE_PATH=backup.json
+
 # Переменная для номера теста
 ITER?=1
 
@@ -29,7 +32,7 @@ rebuild: clean build
 
 # Запуск автотестов с динамическим номером теста
 auto-test: build
-	$(TESTER) -test.v -test.run=^TestIteration$(ITER)$$ -binary-path=$(CMD_DIR)/$(BINARY) -source-path=./ -server-port=$(SERVER_PORT)
+	$(TESTER) -test.v -test.run=^TestIteration$(ITER)$$ -binary-path=$(CMD_DIR)/$(BINARY) -source-path=./ -server-port=$(SERVER_PORT) -file-storage-path=$(FILE_STORAGE_PATH)
 
 # Запуск локальных тестов
 test:

@@ -8,13 +8,28 @@ CMD_DIR=cmd/shortener
 TESTER=./cli/shortenertestbeta
 
 # Порт для тестового сервера авто-тестов
-SERVER_PORT=8080
+SERVER_PORT=8081
 
 # Путь для файла бекапа
 FILE_STORAGE_PATH=backup.json
 
+DATABASE_DSN=postgres://study1-user:123123123@localhost:5435/postgres
+
 # Переменная для номера теста
 ITER?=1
+
+dev-db-up:
+	docker compose up -d postgres
+
+dev-db-down:
+	docker compose down --remove-orphans
+
+dev-up:
+	make dev-db-up
+	make dev-run
+
+dev-run:
+	go run $(CMD_DIR)/main.go
 
 # Цель по умолчанию
 all: build
@@ -32,7 +47,7 @@ rebuild: clean build
 
 # Запуск автотестов с динамическим номером теста
 auto-test: build
-	$(TESTER) -test.v -test.run=^TestIteration$(ITER)$$ -binary-path=$(CMD_DIR)/$(BINARY) -source-path=./ -server-port=$(SERVER_PORT) -file-storage-path=$(FILE_STORAGE_PATH)
+	$(TESTER) -test.v -test.run=^TestIteration$(ITER)$$ -binary-path=$(CMD_DIR)/$(BINARY) -source-path=./ -server-port=$(SERVER_PORT) -file-storage-path=$(FILE_STORAGE_PATH) -database-dsn=$(DATABASE_DSN)
 
 # Запуск локальных тестов
 test:

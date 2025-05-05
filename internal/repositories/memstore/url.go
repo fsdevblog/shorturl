@@ -1,51 +1,60 @@
 package memstore
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/fsdevblog/shorturl/internal/db"
 	"github.com/fsdevblog/shorturl/internal/db/memory"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type URLRepo struct {
-	s      *db.MemoryStorage
-	logger *logrus.Entry
+	s *db.MemoryStorage
 }
 
-func NewURLRepo(store *db.MemoryStorage, logger *logrus.Logger) *URLRepo {
+func NewURLRepo(store *db.MemoryStorage) *URLRepo {
 	return &URLRepo{
-		s:      store,
-		logger: logger.WithField("module", "repository/memstore/url"),
+		s: store,
 	}
 }
 
-func (u *URLRepo) Create(sURL *models.URL) error {
-	if err := memory.Set[models.URL](sURL.ShortIdentifier, sURL, u.s.MStorage); err != nil {
+func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) error {
+	if err := memory.Set[models.URL](ctx, sURL.ShortIdentifier, sURL, u.s.MStorage); err != nil {
 		if errors.Is(err, memory.ErrDuplicateKey) {
 			return repositories.ErrDuplicateKey
 		}
-		u.logger.WithError(err).Errorf("failed to create record %+v", *sURL)
-		return repositories.ErrUnknown
+		return fmt.Errorf(
+			"%w: failed to create record: %s",
+			repositories.ErrUnknown, err.Error())
 	}
 	return nil
 }
 
-func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
-	url, err := memory.Get[models.URL](shortID, u.s.MStorage)
+func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
+	url, err := memory.Get[models.URL](ctx, shortID, u.s.MStorage)
 	if err != nil {
 		if errors.Is(err, memory.ErrNotFound) {
 			return nil, repositories.ErrNotFound
 		}
-		u.logger.WithError(err).Errorf("failed to get record by short identifier %s", shortID)
-		return nil, repositories.ErrUnknown
+		return nil, fmt.Errorf(
+			"%w: failed to get record by short identifier %s",
+			repositories.ErrUnknown, shortID,
+		)
 	}
 	return url, nil
 }
 
-func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
-	data := memory.GetAll[models.URL](u.s.MStorage)
+func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
+	data, err := memory.GetAll[models.URL](ctx, u.s.MStorage)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: failed to get record by url %s records: %s",
+			repositories.ErrUnknown, rawURL, err.Error(),
+		)
+	}
 
 	for _, val := range data {
 		if val.URL == rawURL {
@@ -55,6 +64,13 @@ func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
 	return nil, repositories.ErrNotFound
 }
 
-func (u *URLRepo) GetAll() ([]models.URL, error) {
-	return memory.GetAll[models.URL](u.s.MStorage), nil
+func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
+	urls, err := memory.GetAll[models.URL](ctx, u.s.MStorage)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: failed to get all records: %s",
+			repositories.ErrUnknown, err.Error(),
+		)
+	}
+	return urls, nil
 }

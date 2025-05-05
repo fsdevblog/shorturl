@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/fsdevblog/shorturl/internal/logs"
 	"github.com/sirupsen/logrus"
@@ -17,14 +18,16 @@ import (
 )
 
 type App struct {
-	config     *config.Config
+	config     config.Config
 	dbServices *services.Services
 	Logger     *logrus.Logger
 }
 
-func New(config *config.Config) (*App, error) {
+func New(config config.Config) (*App, error) {
 	logger := logs.New(os.Stdout)
-	dbServices, servicesErr := initServices(config, logger)
+
+	ctx := context.Background()
+	dbServices, servicesErr := initServices(ctx, config)
 
 	if servicesErr != nil {
 		return nil, fmt.Errorf("init services: %w", servicesErr)
@@ -46,7 +49,10 @@ func Must(a *App, err error) *App {
 }
 
 func (a *App) restoreBackup() error {
-	if err := a.dbServices.URLService.RestoreBackup(a.config.FileStoragePath); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
+	defer cancel()
+
+	if err := a.dbServices.URLService.RestoreBackup(ctx, a.config.FileStoragePath); err != nil {
 		return fmt.Errorf("restore backup from file `%s`: %w", a.config.FileStoragePath, err)
 	}
 	return nil
@@ -62,7 +68,14 @@ func (a *App) Run() error {
 	defer stop()
 
 	errChan := make(chan error, 1)
-	server := controllers.SetupRouter(a.dbServices.URLService, a.config, a.Logger)
+
+	server := controllers.SetupRouter(controllers.RouterParams{
+		URLService:  a.dbServices.URLService,
+		PingService: a.dbServices.PingService,
+		AppConf:     a.config,
+		Logger:      a.Logger,
+	})
+
 	go func() {
 		if err := server.Run(a.config.ServerAddress); err != nil {
 			errChan <- err
@@ -77,8 +90,11 @@ func (a *App) Run() error {
 		a.Logger.WithError(serverErr).Error("router error")
 	}
 
+	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
+	defer backupCancel()
+
 	// Делаем бекап
-	if backupErr := a.dbServices.URLService.Backup(a.config.FileStoragePath); backupErr != nil {
+	if backupErr := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); backupErr != nil {
 		a.Logger.WithError(backupErr).
 			Errorf("Making backup to file `%s` error", a.config.FileStoragePath)
 	} else {
@@ -89,15 +105,39 @@ func (a *App) Run() error {
 }
 
 // initServices создает подключение к базе данных и возвращает сервисный слой приложения.
-func initServices(appConf *config.Config, logger *logrus.Logger) (*services.Services, error) {
-	dbConn, connErr := db.NewConnection(db.StorageType(appConf.DBType))
+func initServices(ctx context.Context, appConf config.Config) (*services.Services, error) {
+	// Нужно определить тип хранилища
+	var postgresDSN *string
+	if appConf.DatabaseDSN != "" {
+		postgresDSN = &appConf.DatabaseDSN
+	}
+
+	dbConn, connErr := db.NewConnectionFactory(ctx, db.FactoryConfig{
+		StorageType:  whatIsDBStorageType(&appConf),
+		PostgresDSN:  postgresDSN,
+		SqliteDBPath: nil,
+	})
 	if connErr != nil {
 		return nil, connErr //nolint:wrapcheck
 	}
 
-	dbServices, dbServErr := services.Factory(dbConn, services.ServiceType(appConf.DBType), logger)
+	dbServices, dbServErr := services.Factory(dbConn, whatIsServiceType(&appConf))
 	if dbServErr != nil {
 		return nil, dbServErr //nolint:wrapcheck
 	}
 	return dbServices, nil
+}
+
+func whatIsDBStorageType(appConf *config.Config) db.StorageType {
+	if appConf.DatabaseDSN != "" {
+		return db.StorageTypePostgres
+	}
+	return db.StorageTypeInMemory
+}
+
+func whatIsServiceType(appConf *config.Config) services.ServiceType {
+	if appConf.DatabaseDSN != "" {
+		return services.ServiceTypePostgres
+	}
+	return services.ServiceTypeInMemory
 }

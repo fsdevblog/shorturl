@@ -1,55 +1,84 @@
 package sql
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/fsdevblog/shorturl/internal/models"
-	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type URLRepo struct {
-	db     *gorm.DB
-	logger *logrus.Entry
+	conn *pgxpool.Pool
 }
 
-func NewURLRepo(db *gorm.DB, logger *logrus.Logger) *URLRepo {
+func NewURLRepo(conn *pgxpool.Pool) *URLRepo {
 	return &URLRepo{
-		db:     db,
-		logger: logger.WithField("module", "repository/sql/url"),
+		conn: conn,
 	}
 }
 
-func (u *URLRepo) Create(sURL *models.URL) error {
-	if err := u.db.Create(sURL).Error; err != nil {
-		u.logger.WithError(err).Errorf("failed to create record %+v", *sURL)
-		return ConvertErrorType(err)
+type CreateURLParams struct {
+	ShortIdentifier string
+	URL             string
+}
+
+const createURLQuery = `-- createURL
+INSERT INTO urls (short_identifier, url) VALUES ($1, $2) RETURNING *;
+`
+
+func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) error {
+	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL)
+
+	var m models.URL
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	if scanErr != nil {
+		return ConvertErrorType(scanErr)
 	}
+	*modelURL = m
 	return nil
 }
 
-func (u *URLRepo) GetByShortIdentifier(shortID string) (*models.URL, error) {
-	var url models.URL
-	if err := u.db.Where("short_identifier = ?", shortID).First(&url).Error; err != nil {
-		u.logger.WithError(err).Errorf("failed to get record by short identifier %s", shortID)
-		return nil, ConvertErrorType(fmt.Errorf("failed to get record by short identifier %s: %w", shortID, err))
-	}
-	return &url, nil
+const getByShortIdentifierQuery = `-- getByShortIdentifier
+SELECT id, short_identifier, url FROM urls WHERE short_identifier = $1;
+`
+
+func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
+	row := u.conn.QueryRow(ctx, getByShortIdentifierQuery, shortID)
+	var m models.URL
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	return &m, ConvertErrorType(scanErr)
 }
 
-func (u *URLRepo) GetByURL(rawURL string) (*models.URL, error) {
-	var url models.URL
-	if err := u.db.Where("url = ?", rawURL).First(&url).Error; err != nil {
-		u.logger.WithError(err).Errorf("failed to get record by raw url %s", rawURL)
-		return nil, ConvertErrorType(fmt.Errorf("failed to get record by raw url %s: %w", rawURL, err))
-	}
-	return &url, nil
+const getByURLQuery = `-- getByURL
+SELECT id, short_identifier, url FROM urls WHERE url = $1;
+`
+
+func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
+	row := u.conn.QueryRow(ctx, getByURLQuery, rawURL)
+	var m models.URL
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	return &m, ConvertErrorType(scanErr)
 }
 
-func (u *URLRepo) GetAll() ([]models.URL, error) {
+const getAllURLsQuery = `-- getAllURLs
+SELECT id, short_identifier, url FROM urls;;
+`
+
+func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 	var urls []models.URL
-	if err := u.db.Find(&urls).Error; err != nil {
-		u.logger.WithError(err).Errorf("failed to get all records")
+	rows, qErr := u.conn.Query(ctx, getAllURLsQuery)
+	if qErr != nil {
+		return nil, ConvertErrorType(qErr)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m models.URL
+		if err := rows.Scan(&m.ID, &m.ShortIdentifier, &m.URL); err != nil {
+			return nil, ConvertErrorType(err)
+		}
+		urls = append(urls, m)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, ConvertErrorType(err)
 	}
 	return urls, nil

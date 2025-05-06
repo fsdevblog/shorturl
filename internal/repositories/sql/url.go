@@ -27,7 +27,7 @@ INSERT INTO urls
 VALUES ($1, $2)
 ON CONFLICT (url, short_identifier) 
 	DO UPDATE SET updated_at = NOW()
-RETURNING id, created_at, updated_at, short_identifier, url;
+RETURNING id, created_at, updated_at, short_identifier, url, xmax = 0 AS inserted;
 `
 
 func (u *URLRepo) BatchCreate(
@@ -43,6 +43,7 @@ func (u *URLRepo) BatchCreate(
 	bResults := u.conn.SendBatch(ctx, batch)
 	var ret = make([]repositories.BatchResult[models.URL], len(args))
 	for i := range args {
+		var inserted bool
 		var m repositories.BatchResult[models.URL]
 		err := bResults.QueryRow().Scan(
 			&m.Value.ID,
@@ -50,9 +51,13 @@ func (u *URLRepo) BatchCreate(
 			&m.Value.UpdatedAt,
 			&m.Value.ShortIdentifier,
 			&m.Value.URL,
+			&inserted,
 		)
 		if err != nil {
 			m.Err = ConvertErrorType(err)
+		}
+		if !inserted {
+			m.Err = repositories.ErrDuplicateKey
 		}
 		ret[i] = m
 	}

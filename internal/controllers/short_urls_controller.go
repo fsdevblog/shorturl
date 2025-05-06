@@ -38,7 +38,6 @@ type BatchCreateParams struct {
 type BatchCreateResponse struct {
 	CorrelationID string `json:"correlation_id"`
 	ShortURL      string `json:"short_url,omitempty"`
-	Error         error  `json:"error,omitempty"`
 }
 
 func (s *ShortURLController) BatchCreate(c *gin.Context) {
@@ -81,27 +80,34 @@ func (s *ShortURLController) BatchCreate(c *gin.Context) {
 	}
 
 	var response = make([]BatchCreateResponse, batchResponse.Len())
+	var statusCode = http.StatusCreated
+
 	batchResponse.ReadResponse(func(i int, m models.URL, err error) {
 		cid, ok := urlMap[m.URL]
 		var tmpErrs []error
 		if !ok {
 			cid = ""
 			errMsg := "correlation id not found for url: " + m.URL
-			_ = c.Error(errors.New(errMsg))
 			tmpErrs = append(tmpErrs, errors.New(errMsg))
 		}
 		if err != nil {
-			tmpErrs = append(tmpErrs, err)
+			if errors.Is(err, services.ErrDuplicateKey) {
+				statusCode = http.StatusConflict
+			} else {
+				tmpErrs = append(tmpErrs, err)
+			}
+		}
+		if len(tmpErrs) > 0 {
+			_ = c.Error(errors.Join(tmpErrs...))
 		}
 
 		response[i] = BatchCreateResponse{
 			CorrelationID: cid,
 			ShortURL:      s.getShortURL(c.Request, m.ShortIdentifier),
-			Error:         errors.Join(tmpErrs...),
 		}
 	})
 
-	c.JSON(http.StatusCreated, response)
+	c.JSON(statusCode, response)
 }
 
 func (s *ShortURLController) Redirect(c *gin.Context) {
@@ -149,22 +155,48 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, parseErr.Error())
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
-	defer cancel()
-
-	sURL, createErr := s.urlService.Create(ctx, parsedURL.String())
-
+	sURL, isNewRecord, createErr := s.createSingleURL(c, parsedURL.String())
 	if createErr != nil {
+		_ = c.Error(createErr)
 		c.String(http.StatusInternalServerError, createErr.Error())
-		return
+	}
+
+	var statusCode = http.StatusCreated
+	if !isNewRecord {
+		statusCode = http.StatusConflict
 	}
 
 	if isJSONRequest(c) {
-		c.JSON(http.StatusCreated, gin.H{"result": s.getShortURL(c.Request, sURL.ShortIdentifier)})
+		c.JSON(statusCode, gin.H{"result": s.getShortURL(c.Request, sURL.ShortIdentifier)})
 	} else {
-		c.String(http.StatusCreated, s.getShortURL(c.Request, sURL.ShortIdentifier))
+		c.String(statusCode, s.getShortURL(c.Request, sURL.ShortIdentifier))
 	}
+}
+
+// createSingleURL вспомогательный метод создания короткой ссылки.
+// Возвращает модель, булево значение была вставка или нет и ошибку.
+func (s *ShortURLController) createSingleURL(c *gin.Context, rawURL string) (*models.URL, bool, error) {
+	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
+	defer cancel()
+
+	sURL, createErr := s.urlService.Create(ctx, rawURL)
+
+	if createErr == nil {
+		return sURL, true, nil
+	}
+	if !errors.Is(createErr, services.ErrDuplicateKey) {
+		return nil, false, createErr //nolint:wrapcheck
+	}
+
+	getCtx, getCtxCancel := context.WithTimeout(c, DefaultRequestTimeout)
+	defer getCtxCancel()
+
+	var getErr error
+	sURL, getErr = s.urlService.GetByURL(getCtx, rawURL)
+	if getErr != nil {
+		return nil, false, getErr //nolint:wrapcheck
+	}
+	return sURL, false, nil
 }
 
 // bindCreateParams байндит json или application/x-www-form-urlencoded запросы для создания ссылки.

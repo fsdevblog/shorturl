@@ -17,4 +17,5 @@ type ShortURLStore interface {
 	BatchCreate(ctx context.Context, rawURLs []string) (*services.BatchCreateShortURLsResponse, error)
 	Create(ctx context.Context, rawURL string) (*models.URL, error)
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
+	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
 }

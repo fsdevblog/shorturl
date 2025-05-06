@@ -117,3 +117,18 @@ func (mr *MockShortURLStoreMockRecorder) GetByShortIdentifier(ctx, shortID inter
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByShortIdentifier", reflect.TypeOf((*MockShortURLStore)(nil).GetByShortIdentifier), ctx, shortID)
 }
+
+// GetByURL mocks base method.
+func (m *MockShortURLStore) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByURL", ctx, rawURL)
+	ret0, _ := ret[0].(*models.URL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByURL indicates an expected call of GetByURL.
+func (mr *MockShortURLStoreMockRecorder) GetByURL(ctx, rawURL interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByURL", reflect.TypeOf((*MockShortURLStore)(nil).GetByURL), ctx, rawURL)
+}

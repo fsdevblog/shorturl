@@ -67,29 +67,95 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 		s.T().Fatal(seedErr)
 	}
 
-	batchSize := 3
-	var reqData = make([]BatchCreateParams, batchSize)
+	uniqData := s.prepareTestForCreateBatch(3, true)
+	notUniqData := s.prepareTestForCreateBatch(3, false)
 
+	tests := []struct {
+		name           string
+		wantStatus     int
+		requestPayload []BatchCreateParams
+		mockResponse   *services.BatchCreateShortURLsResponse
+		apiResponse    []BatchCreateResponse
+	}{
+		{name: "uniq urls", wantStatus: http.StatusCreated, requestPayload: uniqData.requestPayload,
+			mockResponse: uniqData.mockResponse, apiResponse: uniqData.apiExpectResponse},
+		{name: "not uniq", wantStatus: http.StatusConflict, requestPayload: notUniqData.requestPayload,
+			mockResponse: notUniqData.mockResponse, apiResponse: notUniqData.apiExpectResponse},
+	}
+
+	for _, t := range tests {
+		s.Run(t.name, func() {
+			s.mockShortURLStore.EXPECT().
+				BatchCreate(gomock.Any(), gomock.Any()).
+				Return(t.mockResponse, nil).
+				Times(1)
+
+			payload, _ := json.Marshal(t.requestPayload)
+			res := s.makeRequest(requestFields{
+				Method:      http.MethodPost,
+				URL:         "/api/shorten/batch",
+				Body:        bytes.NewReader(payload),
+				ContentType: "application/json",
+				Gzipped:     true,
+			})
+
+			defer func() {
+				closeErr := res.Body.Close()
+				s.Require().NoError(closeErr)
+			}()
+
+			body, readBodyErr := readBody(res.Body, true)
+			s.Require().NoError(readBodyErr)
+
+			s.Equal(t.wantStatus, res.StatusCode)
+
+			var respBody []BatchCreateResponse
+			bodyJSONErr := json.Unmarshal(body, &respBody)
+
+			s.Require().NoError(bodyJSONErr)
+
+			s.Equal(t.apiResponse, respBody)
+		})
+	}
+}
+
+type prepareTestDataForCreateBatch struct {
+	mockResponse      *services.BatchCreateShortURLsResponse
+	apiExpectResponse []BatchCreateResponse
+	requestPayload    []BatchCreateParams
+}
+
+func (s *ShortURLControllerSuite) prepareTestForCreateBatch(batchSize int, isUniq bool) *prepareTestDataForCreateBatch {
+	var urls = make([]string, 0, batchSize)
+	for range batchSize {
+		urls = append(urls, gofakeit.URL())
+	}
+
+	var reqData = make([]BatchCreateParams, batchSize)
 	batchResponse := services.NewBatchExecResponseURL(
 		services.NewBatchExecResponse[models.URL](batchSize),
 	)
-
 	var expectedResponse = make([]BatchCreateResponse, batchSize)
 
-	for i := range batchSize {
+	for i, rawURL := range urls {
 		reqData[i] = BatchCreateParams{
 			CorrelationID: gofakeit.UUID(),
-			OriginalURL:   gofakeit.URL(),
+			OriginalURL:   rawURL,
 		}
 		randSid, _ := gofakeit.Generate("????????")
 		item := models.URL{
-			URL:             reqData[i].OriginalURL,
+			URL:             rawURL,
 			ShortIdentifier: randSid,
 		}
 
+		var rErr error
+		if !isUniq && i == len(urls)-1 {
+			// Симулируем поведение при неуникальной ссылке на последней итерации.
+			rErr = services.ErrDuplicateKey
+		}
 		batchResponse.Set(services.BatchResponseItem[models.URL]{
 			Item: item,
-			Err:  nil,
+			Err:  rErr,
 		}, i)
 
 		expectedResponse[i] = BatchCreateResponse{
@@ -98,49 +164,29 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 		}
 	}
 
-	s.mockShortURLStore.EXPECT().
-		BatchCreate(gomock.Any(), gomock.Any()).
-		Return(batchResponse, nil).
-		Times(1)
-
-	payload, _ := json.Marshal(reqData)
-
-	res := s.makeRequest(requestFields{
-		Method:      http.MethodPost,
-		URL:         "/api/shorten/batch",
-		Body:        bytes.NewReader(payload),
-		ContentType: "application/json",
-		Gzipped:     true,
-	})
-	defer func() {
-		closeErr := res.Body.Close()
-		s.Require().NoError(closeErr)
-	}()
-
-	body, readBodyErr := readBody(res.Body, true)
-	s.Require().NoError(readBodyErr)
-
-	s.Equalf(http.StatusCreated, res.StatusCode, string(body), reqData)
-
-	var respBody []BatchCreateResponse
-	bodyJSONErr := json.Unmarshal(body, &respBody)
-
-	s.Require().NoError(bodyJSONErr)
-
-	s.Equal(expectedResponse, respBody)
+	return &prepareTestDataForCreateBatch{
+		mockResponse:      batchResponse,
+		apiExpectResponse: expectedResponse,
+		requestPayload:    reqData,
+	}
 }
 
 //nolint:gocognit
 func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
+	notUniqURL := "https://test.com/not_uniq"
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
 
 	s.mockShortURLStore.EXPECT().Create(gomock.Any(), validURL).Return(&models.URL{
-		ID:              1,
 		URL:             validURL,
 		ShortIdentifier: shortIdentifier,
 	}, nil).Times(4)
+
+	s.mockShortURLStore.EXPECT().Create(gomock.Any(), notUniqURL).Return(&models.URL{
+		URL:             notUniqURL,
+		ShortIdentifier: shortIdentifier,
+	}, nil)
 
 	tests := []struct {
 		name       string
@@ -149,6 +195,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	}{
 		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
 		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
+		{name: "not_uniq", redirectTo: notUniqURL, wantStatus: http.StatusConflict},
 	}
 
 	jsonFn := func(to string) io.Reader {
@@ -189,7 +236,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 
 				s.Equal(tt.wantStatus, res.StatusCode)
 
-				if tt.wantStatus == http.StatusCreated {
+				if tt.wantStatus == http.StatusCreated || tt.wantStatus == http.StatusConflict {
 					body, bErr := readBody(res.Body, r.gzip)
 
 					if bErr != nil {

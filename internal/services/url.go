@@ -50,14 +50,13 @@ func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (
 func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) (*BatchCreateShortURLsResponse, error) {
 	// я проигнорирую здесь вопрос с коллизиями. В батч вставке обработка коллизий - это сущий кошмар который
 	// врядли входит в рамки курса, а у меня мозг плавится, не успеваю к дедлайну по сдаче ревью)
-	// из метода Create её также стоит убрать по идее.
+	// из метода Create её также убрал.
 
 	var args = make([]repositories.BatchCreateArg, len(rawURLs))
-	delta := uint(1)
 	for i, rawURL := range rawURLs {
 		arg := repositories.BatchCreateArg{
 			URL:             rawURL,
-			ShortIdentifier: generateShortID(rawURL, delta, models.ShortIdentifierLength),
+			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
 		}
 		args[i] = arg
 	}
@@ -70,38 +69,39 @@ func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) (*BatchC
 
 	for i, result := range batchResults {
 		batchResponse.results[i].Item = result.Value
-		batchResponse.results[i].Err = result.Err
+		var err = result.Err
+		if result.Err != nil && errors.Is(result.Err, repositories.ErrDuplicateKey) {
+			err = ErrDuplicateKey
+		}
+		batchResponse.results[i].Err = err
 	}
 	return NewBatchExecResponseURL(batchResponse), nil
 }
 
+func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
+	res, err := u.urlRepo.GetByURL(ctx, rawURL)
+
+	if err != nil {
+		if errors.Is(err, repositories.ErrNotFound) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, fmt.Errorf("%w: get by url: %s", ErrUnknown, err.Error())
+	}
+	return res, nil
+}
+
 func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, error) {
-	existingURL, existingURLErr := u.urlRepo.GetByURL(ctx, rawURL)
-	if existingURLErr == nil {
-		return existingURL, nil
+	var sURL = models.URL{
+		URL:             rawURL,
+		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
 	}
-
-	var delta uint = 1
-	var deltaMax uint = 10
-
-	var sURL models.URL
-	for {
-		if delta >= deltaMax {
-			return nil, fmt.Errorf("generateShortID loop limit for url: %w", ErrUnknown)
+	if createErr := u.urlRepo.Create(ctx, &sURL); createErr != nil {
+		if errors.Is(createErr, repositories.ErrDuplicateKey) {
+			return nil, ErrDuplicateKey
 		}
-		sURL = models.URL{
-			URL:             rawURL,
-			ShortIdentifier: generateShortID(rawURL, delta, models.ShortIdentifierLength),
-		}
-		if createErr := u.urlRepo.Create(ctx, &sURL); createErr != nil {
-			if errors.Is(createErr, repositories.ErrDuplicateKey) {
-				delta++
-				continue
-			}
-			return nil, ErrUnknown
-		}
-		return &sURL, nil
+		return nil, ErrUnknown
 	}
+	return &sURL, nil
 }
 
 func (u *URLService) Backup(ctx context.Context, path string) (err error) {
@@ -164,10 +164,9 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 }
 
 // generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.
-func generateShortID(rawURL string, delta uint, length int) string {
+func generateShortID(rawURL string, length int) string {
 	// Добавляем счетчик к срезу (для избежания коллизий)
 	b := []byte(rawURL)
-	b = append(b, byte(delta))
 
 	// Создаем хеш и конвертим в base62
 	hash := md5.Sum(b) //nolint:gosec

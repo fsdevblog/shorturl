@@ -44,6 +44,7 @@ func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error
 	}
 }
 
+// да да, знаю что нужно миграции прикрутить людские). Обязательно сделаю.
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS urls (
     id BIGSERIAL PRIMARY KEY,

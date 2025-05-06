@@ -9,7 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func ConvertErrorType(err error) error {
+func convertErrType(err error) error {
+	if err == nil {
+		return nil
+	}
+
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		errType := repositories.ErrUnknown

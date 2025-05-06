@@ -54,7 +54,7 @@ func (u *URLRepo) BatchCreate(
 			&inserted,
 		)
 		if err != nil {
-			m.Err = ConvertErrorType(err)
+			m.Err = convertErrType(err)
 		}
 		if !inserted {
 			m.Err = repositories.ErrDuplicateKey
@@ -78,7 +78,7 @@ func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) error {
 	var m models.URL
 	scanErr := row.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.ShortIdentifier, &m.URL)
 	if scanErr != nil {
-		return ConvertErrorType(scanErr)
+		return convertErrType(scanErr)
 	}
 	*modelURL = m
 	return nil
@@ -93,7 +93,7 @@ func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*mo
 	var m models.URL
 	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
 	if scanErr != nil {
-		return nil, ConvertErrorType(scanErr)
+		return nil, convertErrType(scanErr)
 	}
 	return &m, nil
 }
@@ -107,7 +107,7 @@ func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, err
 	var m models.URL
 	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
 	if scanErr != nil {
-		return nil, ConvertErrorType(scanErr)
+		return nil, convertErrType(scanErr)
 	}
 	return &m, nil
 }
@@ -120,18 +120,18 @@ func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 	var urls []models.URL
 	rows, qErr := u.conn.Query(ctx, getAllURLsQuery)
 	if qErr != nil {
-		return nil, ConvertErrorType(qErr)
+		return nil, convertErrType(qErr)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var m models.URL
 		if err := rows.Scan(&m.ID, &m.ShortIdentifier, &m.URL); err != nil {
-			return nil, ConvertErrorType(err)
+			return nil, convertErrType(err)
 		}
 		urls = append(urls, m)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, ConvertErrorType(err)
+		return nil, convertErrType(err)
 	}
 	return urls, nil
 }

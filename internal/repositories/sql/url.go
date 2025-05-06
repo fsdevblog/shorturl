@@ -101,7 +101,10 @@ func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, err
 	row := u.conn.QueryRow(ctx, getByURLQuery, rawURL)
 	var m models.URL
 	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
-	return &m, ConvertErrorType(scanErr)
+	if scanErr != nil {
+		return nil, ConvertErrorType(scanErr)
+	}
+	return &m, nil
 }
 
 const getAllURLsQuery = `-- getAllURLs

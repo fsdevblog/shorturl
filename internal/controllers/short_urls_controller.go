@@ -3,13 +3,12 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
-
-	"github.com/pkg/errors"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/services"
@@ -17,22 +16,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:generate mockgen -source=short_urls_controller.go -destination=mocksctrl/url_shortener.go -package=mocksctrl
-type URLShortener interface {
-	BatchCreate(ctx context.Context, rawURLs []string) ([]models.URL, error)
-	Create(ctx context.Context, rawURL string) (*models.URL, error)
-	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
-}
-
 // hostnameRegex в соответствии с `RFC 1123` за исключением - исключает корневые доменные имена (без зоны).
 var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-Z0-9](-?[a-zA-Z0-9])*)$`)
 
 type ShortURLController struct {
-	urlService URLShortener
+	urlService ShortURLStore
 	baseURL    *url.URL
 }
 
-func NewShortURLController(urlService URLShortener, baseURL *url.URL) *ShortURLController {
+func NewShortURLController(urlService ShortURLStore, baseURL *url.URL) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
 		baseURL:    baseURL,
@@ -45,7 +37,8 @@ type BatchCreateParams struct {
 }
 type BatchCreateResponse struct {
 	CorrelationID string `json:"correlation_id"`
-	ShortURL      string `json:"short_url"`
+	ShortURL      string `json:"short_url,omitempty"`
+	Error         error  `json:"error,omitempty"`
 }
 
 func (s *ShortURLController) BatchCreate(c *gin.Context) {
@@ -80,25 +73,33 @@ func (s *ShortURLController) BatchCreate(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
 	defer cancel()
 
-	createdURLs, err := s.urlService.BatchCreate(ctx, rawURLs)
+	batchResponse, err := s.urlService.BatchCreate(ctx, rawURLs)
 	if err != nil {
 		_ = c.Error(fmt.Errorf("batch create urls: %w", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrInternal.Error()})
 		return
 	}
 
-	var response = make([]BatchCreateResponse, 0, len(createdURLs))
-	for _, model := range createdURLs {
-		cid, ok := urlMap[model.URL]
+	var response = make([]BatchCreateResponse, batchResponse.Len())
+	batchResponse.ReadResponse(func(i int, m models.URL, err error) {
+		cid, ok := urlMap[m.URL]
+		var tmpErrs []error
 		if !ok {
-			_ = c.Error(fmt.Errorf("correlation id not found for url: %s", model.URL))
-			continue
+			cid = ""
+			errMsg := "correlation id not found for url: " + m.URL
+			_ = c.Error(errors.New(errMsg))
+			tmpErrs = append(tmpErrs, errors.New(errMsg))
 		}
-		response = append(response, BatchCreateResponse{
-			ShortURL:      s.getShortURL(c.Request, model.ShortIdentifier),
+		if err != nil {
+			tmpErrs = append(tmpErrs, err)
+		}
+
+		response[i] = BatchCreateResponse{
 			CorrelationID: cid,
-		})
-	}
+			ShortURL:      s.getShortURL(c.Request, m.ShortIdentifier),
+			Error:         errors.Join(tmpErrs...),
+		}
+	})
 
 	c.JSON(http.StatusCreated, response)
 }

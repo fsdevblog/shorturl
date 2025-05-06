@@ -6,13 +6,12 @@ import (
 	"crypto/md5" //nolint:gosec
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
-
-	"github.com/pkg/errors"
 )
 
 type URLRepository interface {
@@ -47,12 +46,8 @@ func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (
 	return sURL, nil
 }
 
-type BatchExecResponse[T any] struct {
-	Result T
-	Err    error
-}
-
-func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) ([]models.URL, error) {
+// BatchCreate Создает урлы пачками.
+func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) (*BatchCreateShortURLsResponse, error) {
 	// я проигнорирую здесь вопрос с коллизиями. В батч вставке обработка коллизий - это сущий кошмар который
 	// врядли входит в рамки курса, а у меня мозг плавится, не успеваю к дедлайну по сдаче ревью)
 	// из метода Create её также стоит убрать по идее.
@@ -71,14 +66,13 @@ func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) ([]model
 	if batchErr != nil {
 		return nil, fmt.Errorf("%w: batch create: %s", ErrUnknown, batchErr.Error())
 	}
-	var m = make([]models.URL, len(batchResults))
+	batchResponse := NewBatchExecResponse[models.URL](len(batchResults))
+
 	for i, result := range batchResults {
-		m[i] = result.Value
-		// if result.Err != nil {
-		//	// тут потом разберусь..
-		//}
+		batchResponse.results[i].Item = result.Value
+		batchResponse.results[i].Err = result.Err
 	}
-	return m, nil
+	return NewBatchExecResponseURL(batchResponse), nil
 }
 
 func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, error) {

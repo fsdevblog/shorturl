@@ -38,16 +38,16 @@ const (
 
 type ShortURLControllerSuite struct {
 	suite.Suite
-	urlServMock *mocksctrl.MockURLShortener
-	router      *gin.Engine
-	config      *config.Config
+	mockShortURLStore *mocksctrl.MockShortURLStore
+	router            *gin.Engine
+	config            *config.Config
 }
 
 func (s *ShortURLControllerSuite) SetupTest() {
-	urlServMockCtrl := gomock.NewController(s.T())
-	defer urlServMockCtrl.Finish()
+	mockShortURL := gomock.NewController(s.T())
+	defer mockShortURL.Finish()
 
-	s.urlServMock = mocksctrl.NewMockURLShortener(urlServMockCtrl)
+	s.mockShortURLStore = mocksctrl.NewMockShortURLStore(mockShortURL)
 
 	appConf := config.Config{
 		ServerAddress: ":80",
@@ -55,7 +55,7 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	}
 	s.config = &appConf
 	s.router = SetupRouter(RouterParams{
-		URLService:  s.urlServMock,
+		URLService:  s.mockShortURLStore,
 		PingService: nil,
 		AppConf:     appConf,
 		Logger:      logs.New(os.Stdout),
@@ -67,9 +67,12 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 		s.T().Fatal(seedErr)
 	}
 
-	batchSize := 100
+	batchSize := 3
 	var reqData = make([]BatchCreateParams, batchSize)
-	var resData = make([]models.URL, batchSize)
+
+	batchResponse := services.NewBatchExecResponseURL(
+		services.NewBatchExecResponse[models.URL](batchSize),
+	)
 
 	var expectedResponse = make([]BatchCreateResponse, batchSize)
 
@@ -79,19 +82,25 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 			OriginalURL:   gofakeit.URL(),
 		}
 		randSid, _ := gofakeit.Generate("????????")
-		resData[i] = models.URL{
+		item := models.URL{
 			URL:             reqData[i].OriginalURL,
 			ShortIdentifier: randSid,
 		}
+
+		batchResponse.Set(services.BatchResponseItem[models.URL]{
+			Item: item,
+			Err:  nil,
+		}, i)
+
 		expectedResponse[i] = BatchCreateResponse{
 			CorrelationID: reqData[i].CorrelationID,
 			ShortURL:      s.genShortURLFromSid(randSid),
 		}
 	}
 
-	s.urlServMock.EXPECT().
+	s.mockShortURLStore.EXPECT().
 		BatchCreate(gomock.Any(), gomock.Any()).
-		Return(resData, nil).
+		Return(batchResponse, nil).
 		Times(1)
 
 	payload, _ := json.Marshal(reqData)
@@ -112,8 +121,10 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 	s.Require().NoError(readBodyErr)
 
 	s.Equalf(http.StatusCreated, res.StatusCode, string(body), reqData)
+
 	var respBody []BatchCreateResponse
 	bodyJSONErr := json.Unmarshal(body, &respBody)
+
 	s.Require().NoError(bodyJSONErr)
 
 	s.Equal(expectedResponse, respBody)
@@ -125,7 +136,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
 
-	s.urlServMock.EXPECT().Create(gomock.Any(), validURL).Return(&models.URL{
+	s.mockShortURLStore.EXPECT().Create(gomock.Any(), validURL).Return(&models.URL{
 		ID:              1,
 		URL:             validURL,
 		ShortIdentifier: shortIdentifier,
@@ -208,12 +219,12 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 
 	redirectTo := "https://test.com/test/123"
 
-	s.urlServMock.EXPECT().
+	s.mockShortURLStore.EXPECT().
 		GetByShortIdentifier(gomock.Any(), validShortID).
 		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil).
 		Times(1)
 
-	s.urlServMock.EXPECT().
+	s.mockShortURLStore.EXPECT().
 		GetByShortIdentifier(gomock.Any(), notExistShortID).
 		Return(nil, services.ErrRecordNotFound).
 		Times(1)

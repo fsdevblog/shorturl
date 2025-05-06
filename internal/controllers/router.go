@@ -8,7 +8,7 @@ import (
 )
 
 type RouterParams struct {
-	URLService  URLShortener
+	URLService  ShortURLStore
 	PingService ConnectionChecker
 	AppConf     config.Config
 	Logger      *logrus.Logger

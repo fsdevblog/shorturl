@@ -8,11 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:generate mockgen -source=ping_controller.go -destination=mocksctrl/pinger.go -package=mocksctrl
-type ConnectionChecker interface {
-	CheckConnection(ctx context.Context) error
-}
-
 type PingController struct {
 	conn ConnectionChecker
 }

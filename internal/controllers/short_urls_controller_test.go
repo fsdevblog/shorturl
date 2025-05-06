@@ -160,7 +160,7 @@ func (s *ShortURLControllerSuite) prepareTestForCreateBatch(batchSize int, isUni
 
 		expectedResponse[i] = BatchCreateResponse{
 			CorrelationID: reqData[i].CorrelationID,
-			ShortURL:      s.genShortURLFromSid(randSid),
+			ShortURL:      s.genShortURLForSid(randSid),
 		}
 	}
 
@@ -253,7 +253,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 					if r.rType == JSONCType {
 						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL.String(), shortIdentifier)
 					} else {
-						shortURL = s.genShortURLFromSid(shortIdentifier)
+						shortURL = s.genShortURLForSid(shortIdentifier)
 					}
 					s.Equal(shortURL, string(body))
 				}
@@ -410,7 +410,7 @@ func TestShortURLControllerSuite(t *testing.T) {
 	suite.Run(t, new(ShortURLControllerSuite))
 }
 
-func (s *ShortURLControllerSuite) genShortURLFromSid(sid string) string {
+func (s *ShortURLControllerSuite) genShortURLForSid(sid string) string {
 	return fmt.Sprintf("%s/%s", s.config.BaseURL.String(), sid)
 }
 

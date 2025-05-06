@@ -16,9 +16,8 @@ const (
 )
 
 type FactoryConfig struct {
-	StorageType  StorageType
-	PostgresDSN  *string
-	SqliteDBPath *string
+	StorageType StorageType
+	PostgresDSN *string
 }
 
 func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error) {
@@ -48,8 +47,8 @@ func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS urls (
     id BIGSERIAL PRIMARY KEY,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
+    created_at timestamp with time zone DEFAULT NOW(),
+    updated_at timestamp with time zone DEFAULT NOW(),
     url VARCHAR(512) NOT NULL,
     short_identifier VARCHAR(8) NOT NULL
 );

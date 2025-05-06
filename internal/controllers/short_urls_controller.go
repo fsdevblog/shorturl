@@ -159,6 +159,7 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	if createErr != nil {
 		_ = c.Error(createErr)
 		c.String(http.StatusInternalServerError, createErr.Error())
+		return
 	}
 
 	var statusCode = http.StatusCreated

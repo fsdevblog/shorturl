@@ -55,8 +55,8 @@ func (u *URLRepo) BatchCreate(
 		)
 		if err != nil {
 			m.Err = convertErrType(err)
-		}
-		if !inserted {
+		} else if !inserted && m.Value.ID != 0 {
+			// Если запись получена но при этом не вставлена, нужно указать что она не уникальна.
 			m.Err = repositories.ErrDuplicateKey
 		}
 		ret[i] = m
@@ -68,8 +68,10 @@ func (u *URLRepo) BatchCreate(
 }
 
 const createURLQuery = `-- createURL
-INSERT INTO urls (short_identifier, url) VALUES ($1, $2) 
-RETURNING id, created_at, updated_at, short_identifier, url;
+INSERT INTO urls (short_identifier, url) 
+	VALUES ($1, $2) 
+RETURNING 
+	id, created_at, updated_at, short_identifier, url;
 `
 
 func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) error {

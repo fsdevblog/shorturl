@@ -115,9 +115,8 @@ func initServices(ctx context.Context, appConf config.Config) (*services.Service
 	}
 
 	dbConn, connErr := db.NewConnectionFactory(ctx, db.FactoryConfig{
-		StorageType:  whatIsDBStorageType(&appConf),
-		PostgresDSN:  postgresDSN,
-		SqliteDBPath: nil,
+		StorageType: whatIsDBStorageType(&appConf),
+		PostgresDSN: postgresDSN,
 	})
 	if connErr != nil {
 		return nil, connErr //nolint:wrapcheck

@@ -8,7 +8,7 @@ CMD_DIR=cmd/shortener
 TESTER=./cli/shortenertestbeta
 
 # Порт для тестового сервера авто-тестов
-SERVER_PORT=8081
+SERVER_PORT=8080
 
 # Путь для файла бекапа
 FILE_STORAGE_PATH=backup.json
@@ -29,7 +29,7 @@ dev-up:
 	make dev-run
 
 dev-run:
-	go run $(CMD_DIR)/main.go
+	go run $(CMD_DIR)/main.go -a :$(SERVER_PORT) -d $(DATABASE_DSN)
 
 # Цель по умолчанию
 all: build

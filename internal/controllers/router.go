@@ -33,6 +33,7 @@ func SetupRouter(params RouterParams) *gin.Engine {
 
 	api := r.Group("/api")
 	api.POST("/shorten", shortURLController.CreateShortURL)
+	api.POST("/shorten/batch", shortURLController.BatchCreate)
 	api.GET("/:shortID", shortURLController.Redirect)
 	return r
 }

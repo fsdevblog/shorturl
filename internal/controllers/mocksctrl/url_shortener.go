@@ -35,6 +35,21 @@ func (m *MockURLShortener) EXPECT() *MockURLShortenerMockRecorder {
 	return m.recorder
 }
 
+// BatchCreate mocks base method.
+func (m *MockURLShortener) BatchCreate(ctx context.Context, rawURLs []string) ([]models.URL, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchCreate", ctx, rawURLs)
+	ret0, _ := ret[0].([]models.URL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchCreate indicates an expected call of BatchCreate.
+func (mr *MockURLShortenerMockRecorder) BatchCreate(ctx, rawURLs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockURLShortener)(nil).BatchCreate), ctx, rawURLs)
+}
+
 // Create mocks base method.
 func (m *MockURLShortener) Create(ctx context.Context, rawURL string) (*models.URL, error) {
 	m.ctrl.T.Helper()

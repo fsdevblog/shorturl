@@ -19,6 +19,7 @@ import (
 
 //go:generate mockgen -source=short_urls_controller.go -destination=mocksctrl/url_shortener.go -package=mocksctrl
 type URLShortener interface {
+	BatchCreate(ctx context.Context, rawURLs []string) ([]models.URL, error)
 	Create(ctx context.Context, rawURL string) (*models.URL, error)
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 }
@@ -36,6 +37,70 @@ func NewShortURLController(urlService URLShortener, baseURL *url.URL) *ShortURLC
 		urlService: urlService,
 		baseURL:    baseURL,
 	}
+}
+
+type BatchCreateParams struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
+}
+type BatchCreateResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	ShortURL      string `json:"short_url"`
+}
+
+func (s *ShortURLController) BatchCreate(c *gin.Context) {
+	var params []BatchCreateParams
+	if bindErr := c.ShouldBindJSON(&params); bindErr != nil {
+		_ = c.Error(fmt.Errorf("bind params: %w", bindErr))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request. Only json is supported"})
+		return
+	}
+
+	var urlMap = make(map[string]string, len(params))
+	var rawURLs = make([]string, len(params))
+
+	for i, param := range params {
+		_, parseErr := validateURL(param.OriginalURL)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":          param.OriginalURL + " is invalid URL",
+				"correlation_id": param.CorrelationID,
+			})
+			return
+		}
+		urlMap[param.OriginalURL] = param.CorrelationID
+		rawURLs[i] = param.OriginalURL
+	}
+
+	if len(rawURLs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty request"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
+	defer cancel()
+
+	createdURLs, err := s.urlService.BatchCreate(ctx, rawURLs)
+	if err != nil {
+		_ = c.Error(fmt.Errorf("batch create urls: %w", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrInternal.Error()})
+		return
+	}
+
+	var response = make([]BatchCreateResponse, 0, len(createdURLs))
+	for _, model := range createdURLs {
+		cid, ok := urlMap[model.URL]
+		if !ok {
+			_ = c.Error(fmt.Errorf("correlation id not found for url: %s", model.URL))
+			continue
+		}
+		response = append(response, BatchCreateResponse{
+			ShortURL:      s.getShortURL(c.Request, model.ShortIdentifier),
+			CorrelationID: cid,
+		})
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
 
 func (s *ShortURLController) Redirect(c *gin.Context) {

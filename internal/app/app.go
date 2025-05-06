@@ -94,6 +94,8 @@ func (a *App) Run() error {
 	defer backupCancel()
 
 	// Делаем бекап
+	// Из ТЗ не ясно, стоит делать бекап при подключении к БД или нет (такой бекап не имеет никакого смысла)
+	// Лучше трогать не буду, проходят тесты и слава богу.
 	if backupErr := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); backupErr != nil {
 		a.Logger.WithError(backupErr).
 			Errorf("Making backup to file `%s` error", a.config.FileStoragePath)

@@ -47,8 +47,10 @@ func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS urls (
     id BIGSERIAL PRIMARY KEY,
-    url VARCHAR(512),
-    short_identifier VARCHAR(8)
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    url VARCHAR(512) NOT NULL,
+    short_identifier VARCHAR(8) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_urls_url_short_identifier ON urls (url, short_identifier);
 `

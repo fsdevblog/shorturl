@@ -66,6 +66,22 @@ func Get[T any](ctx context.Context, key string, m *MStorage) (*T, error) {
 	}
 }
 
+type BatchResult struct {
+	Key string
+	Err error
+}
+
+func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage) []BatchResult {
+	var br = make([]BatchResult, len(values))
+	i := 0
+	for key, val := range values {
+		err := Set(ctx, key, val, m)
+		br[i] = BatchResult{Key: key, Err: err}
+		i++
+	}
+	return nil
+}
+
 // Set сохраняет новые пары ключ/значение. Ключ обязан быть уникальным, иначе вернется ошибка ErrDuplicateKey.
 func Set[T any](ctx context.Context, key string, val *T, m *MStorage) error {
 	select {
@@ -83,7 +99,7 @@ func Set[T any](ctx context.Context, key string, val *T, m *MStorage) error {
 
 		bytes, err := json.Marshal(val)
 		if err != nil {
-			return fmt.Errorf("marshal %+v: %w", val, err)
+			return fmt.Errorf("%w: marshal %+v: %s", ErrSerialize, val, err.Error())
 		}
 		m.data[key] = bytes
 		return nil

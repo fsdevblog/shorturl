@@ -2,6 +2,10 @@ package sql
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/fsdevblog/shorturl/internal/repositories"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,20 +21,57 @@ func NewURLRepo(conn *pgxpool.Pool) *URLRepo {
 	}
 }
 
-type CreateURLParams struct {
-	ShortIdentifier string
-	URL             string
+const batchCreateURLQuery = `-- batchCreateURLs
+INSERT INTO urls 
+	(short_identifier, url) 
+VALUES ($1, $2)
+ON CONFLICT (url, short_identifier) 
+	DO UPDATE SET updated_at = NOW()
+RETURNING id, created_at, updated_at, short_identifier, url;
+`
+
+func (u *URLRepo) BatchCreate(
+	ctx context.Context,
+	args []repositories.BatchCreateArg,
+) ([]repositories.BatchResult[models.URL], error) {
+	batch := new(pgx.Batch)
+
+	for _, arg := range args {
+		vals := []interface{}{arg.ShortIdentifier, arg.URL}
+		batch.Queue(batchCreateURLQuery, vals...)
+	}
+	bResults := u.conn.SendBatch(ctx, batch)
+	var ret = make([]repositories.BatchResult[models.URL], len(args))
+	for i := range args {
+		var m repositories.BatchResult[models.URL]
+		err := bResults.QueryRow().Scan(
+			&m.Value.ID,
+			&m.Value.CreatedAt,
+			&m.Value.UpdatedAt,
+			&m.Value.ShortIdentifier,
+			&m.Value.URL,
+		)
+		if err != nil {
+			m.Err = ConvertErrorType(err)
+		}
+		ret[i] = m
+	}
+	if err := bResults.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close batch: %w", err)
+	}
+	return ret, nil
 }
 
 const createURLQuery = `-- createURL
-INSERT INTO urls (short_identifier, url) VALUES ($1, $2) RETURNING *;
+INSERT INTO urls (short_identifier, url) VALUES ($1, $2) 
+RETURNING id, created_at, updated_at, short_identifier, url;
 `
 
 func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) error {
 	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL)
 
 	var m models.URL
-	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	scanErr := row.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.ShortIdentifier, &m.URL)
 	if scanErr != nil {
 		return ConvertErrorType(scanErr)
 	}
@@ -46,7 +87,10 @@ func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*mo
 	row := u.conn.QueryRow(ctx, getByShortIdentifierQuery, shortID)
 	var m models.URL
 	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
-	return &m, ConvertErrorType(scanErr)
+	if scanErr != nil {
+		return nil, ConvertErrorType(scanErr)
+	}
+	return &m, nil
 }
 
 const getByURLQuery = `-- getByURL

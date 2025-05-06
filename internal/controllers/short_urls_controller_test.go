@@ -178,15 +178,22 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
 
-	s.mockShortURLStore.EXPECT().Create(gomock.Any(), validURL).Return(&models.URL{
-		URL:             validURL,
-		ShortIdentifier: shortIdentifier,
-	}, nil).Times(4)
+	s.mockShortURLStore.EXPECT().
+		Create(gomock.Any(), validURL).
+		Return(&models.URL{
+			URL:             validURL,
+			ShortIdentifier: shortIdentifier,
+		}, nil).MinTimes(1)
 
-	s.mockShortURLStore.EXPECT().Create(gomock.Any(), notUniqURL).Return(&models.URL{
+	s.mockShortURLStore.EXPECT().
+		Create(gomock.Any(), notUniqURL).
+		Return(nil, services.ErrDuplicateKey).
+		MinTimes(1)
+
+	s.mockShortURLStore.EXPECT().GetByURL(gomock.Any(), notUniqURL).Return(&models.URL{
 		URL:             notUniqURL,
 		ShortIdentifier: shortIdentifier,
-	}, nil)
+	}, nil).MinTimes(1)
 
 	tests := []struct {
 		name       string
@@ -195,6 +202,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	}{
 		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
 		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
+		{name: "not_uniq", redirectTo: notUniqURL, wantStatus: http.StatusConflict},
 	}
 
 	jsonFn := func(to string) io.Reader {

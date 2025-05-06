@@ -4,51 +4,53 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/fsdevblog/shorturl/internal/db"
 	"github.com/fsdevblog/shorturl/internal/repositories/memstore"
 	"github.com/fsdevblog/shorturl/internal/repositories/sql"
-
-	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 type ServiceType string
 
 const (
-	ServiceTypeSQLite   ServiceType = "sqlite"
+	ServiceTypePostgres ServiceType = "postgres"
 	ServiceTypeInMemory ServiceType = "inMemory"
 )
 
 type Services struct {
-	URLService *URLService
+	URLService  *URLService
+	PingService *PingService
 }
 
-func Factory(conn any, sType ServiceType, logger *logrus.Logger) (*Services, error) {
+func Factory(conn any, sType ServiceType) (*Services, error) {
 	switch sType {
-	case ServiceTypeSQLite:
-		gormDB, ok := conn.(*gorm.DB)
+	case ServiceTypePostgres:
+		pool, ok := conn.(*pgxpool.Pool)
 		if !ok {
-			return nil, errors.New("invalid connection type. expected *gorm.DB")
+			return nil, errors.New("invalid connection type. expected *pgxpool.Pool")
 		}
-		return getSQLServices(gormDB, logger), nil
+		return getSQLServices(pool), nil
 	case ServiceTypeInMemory:
-		return getInMemoryServices(logger), nil
+		return getInMemoryServices(), nil
 	default:
 		return nil, fmt.Errorf("unknown service type: %s", sType)
 	}
 }
 
-func getSQLServices(conn *gorm.DB, logger *logrus.Logger) *Services {
-	urlRepo := sql.NewURLRepo(conn, logger)
+func getSQLServices(conn *pgxpool.Pool) *Services {
+	urlRepo := sql.NewURLRepo(conn)
 	return &Services{
-		URLService: NewURLService(urlRepo),
+		URLService:  NewURLService(urlRepo),
+		PingService: NewPingService(conn),
 	}
 }
 
-func getInMemoryServices(logger *logrus.Logger) *Services {
+func getInMemoryServices() *Services {
 	store := db.NewMemStorage()
-	urlRepo := memstore.NewURLRepo(store, logger)
+	urlRepo := memstore.NewURLRepo(store)
 	return &Services{
-		URLService: NewURLService(urlRepo),
+		URLService:  NewURLService(urlRepo),
+		PingService: NewPingService(store),
 	}
 }

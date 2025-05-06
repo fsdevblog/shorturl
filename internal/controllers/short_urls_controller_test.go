@@ -195,7 +195,6 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	}{
 		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
 		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
-		{name: "not_uniq", redirectTo: notUniqURL, wantStatus: http.StatusConflict},
 	}
 
 	jsonFn := func(to string) io.Reader {

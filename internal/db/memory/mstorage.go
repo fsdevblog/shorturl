@@ -79,7 +79,7 @@ func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage) []B
 		br[i] = BatchResult{Key: key, Err: err}
 		i++
 	}
-	return nil
+	return br
 }
 
 // Set сохраняет новые пары ключ/значение. Ключ обязан быть уникальным, иначе вернется ошибка ErrDuplicateKey.

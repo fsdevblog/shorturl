@@ -31,6 +31,9 @@ dev-up:
 dev-run:
 	go run $(CMD_DIR)/main.go -a :$(SERVER_PORT) -d $(DATABASE_DSN)
 
+dev-run-memory:
+	go run $(CMD_DIR)/main.go -a :$(SERVER_PORT)
+
 # Цель по умолчанию
 all: build
 

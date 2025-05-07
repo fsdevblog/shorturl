@@ -15,7 +15,8 @@ type ConnectionChecker interface {
 
 type ShortURLStore interface {
 	BatchCreate(ctx context.Context, rawURLs []string) (*services.BatchCreateShortURLsResponse, error)
-	Create(ctx context.Context, rawURL string) (*models.URL, error)
+	// Create создает запись models.URL. Возвращает модель, булево значение новая записи или нет и ошибку.
+	Create(ctx context.Context, rawURL string) (*models.URL, bool, error)
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
 }

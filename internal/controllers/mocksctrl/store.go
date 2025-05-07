@@ -89,12 +89,13 @@ func (mr *MockShortURLStoreMockRecorder) BatchCreate(ctx, rawURLs interface{}) *
 }
 
 // Create mocks base method.
-func (m *MockShortURLStore) Create(ctx context.Context, rawURL string) (*models.URL, error) {
+func (m *MockShortURLStore) Create(ctx context.Context, rawURL string) (*models.URL, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, rawURL)
 	ret0, _ := ret[0].(*models.URL)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // Create indicates an expected call of Create.

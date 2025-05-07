@@ -183,17 +183,15 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 		Return(&models.URL{
 			URL:             validURL,
 			ShortIdentifier: shortIdentifier,
-		}, nil).MinTimes(1)
+		}, true, nil).MinTimes(1)
 
 	s.mockShortURLStore.EXPECT().
 		Create(gomock.Any(), notUniqURL).
-		Return(nil, services.ErrDuplicateKey).
+		Return(&models.URL{
+			URL:             notUniqURL,
+			ShortIdentifier: shortIdentifier,
+		}, false, nil).
 		MinTimes(1)
-
-	s.mockShortURLStore.EXPECT().GetByURL(gomock.Any(), notUniqURL).Return(&models.URL{
-		URL:             notUniqURL,
-		ShortIdentifier: shortIdentifier,
-	}, nil).MinTimes(1)
 
 	tests := []struct {
 		name       string

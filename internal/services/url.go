@@ -17,7 +17,8 @@ import (
 type URLRepository interface {
 	BatchCreate(ctx context.Context, mURLs []repositories.BatchCreateArg) ([]repositories.BatchResult[models.URL], error)
 	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
-	Create(ctx context.Context, mURL *models.URL) error
+	// Возвращает два значения: bool отвечает за уникальность созданной записи, 2 ошибку.
+	Create(ctx context.Context, mURL *models.URL) (bool, error)
 	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 	// GetByURL находит запись в хранилище по заданной ссылке
@@ -90,18 +91,16 @@ func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, 
 	return res, nil
 }
 
-func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, error) {
+func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, bool, error) {
 	var sURL = models.URL{
 		URL:             rawURL,
 		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
 	}
-	if createErr := u.urlRepo.Create(ctx, &sURL); createErr != nil {
-		if errors.Is(createErr, repositories.ErrDuplicateKey) {
-			return nil, ErrDuplicateKey
-		}
-		return nil, ErrUnknown
+	isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
+	if createErr != nil {
+		return nil, false, fmt.Errorf("%w: create: %s", ErrUnknown, createErr.Error())
 	}
-	return &sURL, nil
+	return &sURL, isUniq, nil
 }
 
 func (u *URLService) Backup(ctx context.Context, path string) (err error) {
@@ -152,12 +151,10 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); jsonErr != nil {
 			return fmt.Errorf("unmarshal record: %w", jsonErr)
 		}
-		createErr := u.urlRepo.Create(ctx, &record)
+		_, createErr := u.urlRepo.Create(ctx, &record)
 
 		if createErr != nil {
-			if !errors.Is(createErr, repositories.ErrDuplicateKey) {
-				return fmt.Errorf("create record: %w", createErr)
-			}
+			return fmt.Errorf("create record: %w", createErr)
 		}
 	}
 	return nil

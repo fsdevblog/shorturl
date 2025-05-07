@@ -155,7 +155,7 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 		c.String(http.StatusUnprocessableEntity, parseErr.Error())
 		return
 	}
-	sURL, isNewRecord, createErr := s.createSingleURL(c, parsedURL.String())
+	sURL, isNewRecord, createErr := s.urlService.Create(c, parsedURL.String())
 	if createErr != nil {
 		_ = c.Error(createErr)
 		c.String(http.StatusInternalServerError, createErr.Error())
@@ -172,32 +172,6 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	} else {
 		c.String(statusCode, s.getShortURL(c.Request, sURL.ShortIdentifier))
 	}
-}
-
-// createSingleURL вспомогательный метод создания короткой ссылки.
-// Возвращает модель, булево значение была вставка или нет и ошибку.
-func (s *ShortURLController) createSingleURL(c *gin.Context, rawURL string) (*models.URL, bool, error) {
-	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
-	defer cancel()
-
-	sURL, createErr := s.urlService.Create(ctx, rawURL)
-
-	if createErr == nil {
-		return sURL, true, nil
-	}
-	if !errors.Is(createErr, services.ErrDuplicateKey) {
-		return nil, false, createErr //nolint:wrapcheck
-	}
-
-	getCtx, getCtxCancel := context.WithTimeout(c, DefaultRequestTimeout)
-	defer getCtxCancel()
-
-	var getErr error
-	sURL, getErr = s.urlService.GetByURL(getCtx, rawURL)
-	if getErr != nil {
-		return nil, false, getErr //nolint:wrapcheck
-	}
-	return sURL, false, nil
 }
 
 // bindCreateParams байндит json или application/x-www-form-urlencoded запросы для создания ссылки.

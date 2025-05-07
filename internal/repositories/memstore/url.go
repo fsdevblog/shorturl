@@ -2,6 +2,7 @@ package memstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/fsdevblog/shorturl/internal/db"
@@ -47,14 +48,18 @@ func (u *URLRepo) BatchCreate(
 	return result, nil
 }
 
-func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) error {
+func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) (bool, error) {
 	if err := memory.Set[models.URL](ctx, sURL.ShortIdentifier, sURL, u.s.MStorage); err != nil {
-		return fmt.Errorf(
+		if errors.Is(err, memory.ErrDuplicateKey) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf(
 			"failed to create record: %w",
 			convertErrorType(err),
 		)
 	}
-	return nil
+	return true, nil
 }
 
 func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {

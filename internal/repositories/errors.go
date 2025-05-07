@@ -3,7 +3,7 @@ package repositories
 import "errors"
 
 var (
-	ErrNotFound     = errors.New("record not found")
-	ErrDuplicateKey = errors.New("duplicate key")
-	ErrUnknown      = errors.New("unknown error")
+	ErrNotFound     = errors.New("[repository]: record not found")
+	ErrDuplicateKey = errors.New("[repository]: duplicate key")
+	ErrUnknown      = errors.New("[repository]: unknown error")
 )

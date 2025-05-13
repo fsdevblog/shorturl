@@ -48,18 +48,18 @@ func (u *URLRepo) BatchCreate(
 	return result, nil
 }
 
-func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) (bool, error) {
+func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) (*models.URL, bool, error) {
 	if err := memory.Set[models.URL](ctx, sURL.ShortIdentifier, sURL, u.s.MStorage); err != nil {
 		if errors.Is(err, memory.ErrDuplicateKey) {
-			return false, nil
+			return nil, false, nil
 		}
 
-		return false, fmt.Errorf(
+		return nil, false, fmt.Errorf(
 			"failed to create record: %w",
 			convertErrorType(err),
 		)
 	}
-	return true, nil
+	return sURL, true, nil
 }
 
 func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {

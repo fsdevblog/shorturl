@@ -13,7 +13,7 @@ SERVER_PORT=8080
 # Путь для файла бекапа
 FILE_STORAGE_PATH=backup.json
 
-DATABASE_DSN=postgres://study1-user:123123123@localhost:5435/postgres
+DATABASE_DSN=postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable
 
 # Переменная для номера теста
 ITER?=1
@@ -55,3 +55,10 @@ auto-test: build
 # Запуск локальных тестов
 test:
 	go test ./... -v
+
+# Миграция вверх
+migrate-up:
+	migrate -database "postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable" -path ./internal/db/migrations up 1
+
+migrate-down:
+	migrate -database "postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable" -path ./internal/db/migrations down 1

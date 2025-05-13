@@ -18,7 +18,7 @@ type URLRepository interface {
 	BatchCreate(ctx context.Context, mURLs []repositories.BatchCreateArg) ([]repositories.BatchResult[models.URL], error)
 	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
 	// Возвращает два значения: bool отвечает за уникальность созданной записи, 2 ошибку.
-	Create(ctx context.Context, mURL *models.URL) (bool, error)
+	Create(ctx context.Context, mURL *models.URL) (*models.URL, bool, error)
 	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 	// GetByURL находит запись в хранилище по заданной ссылке
@@ -96,11 +96,11 @@ func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, bo
 		URL:             rawURL,
 		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
 	}
-	isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
+	m, isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
 	if createErr != nil {
 		return nil, false, fmt.Errorf("%w: create: %s", ErrUnknown, createErr.Error())
 	}
-	return &sURL, isUniq, nil
+	return m, isUniq, nil
 }
 
 func (u *URLService) Backup(ctx context.Context, path string) (err error) {
@@ -144,6 +144,8 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 		}
 	}()
 
+	batchLimit := 1000
+	batch := make([]repositories.BatchCreateArg, 0, batchLimit)
 	// Читаем построчно. Batch вставку делать некогда если честно.
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -151,10 +153,23 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); jsonErr != nil {
 			return fmt.Errorf("unmarshal record: %w", jsonErr)
 		}
-		_, createErr := u.urlRepo.Create(ctx, &record)
+		batch = append(batch, repositories.BatchCreateArg{
+			ShortIdentifier: record.ShortIdentifier,
+			URL:             record.URL,
+		})
 
-		if createErr != nil {
-			return fmt.Errorf("create record: %w", createErr)
+		if len(batch) == batchLimit {
+			_, batchErr := u.urlRepo.BatchCreate(ctx, batch)
+			if batchErr != nil {
+				return fmt.Errorf("batch create: %w", batchErr)
+			}
+			batch = make([]repositories.BatchCreateArg, 0, batchLimit)
+		}
+	}
+	if len(batch) > 0 {
+		_, batchErr := u.urlRepo.BatchCreate(ctx, batch)
+		if batchErr != nil {
+			return fmt.Errorf("batch create: %w", batchErr)
 		}
 	}
 	return nil

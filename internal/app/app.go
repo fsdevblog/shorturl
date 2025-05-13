@@ -109,14 +109,12 @@ func (a *App) Run() error {
 // initServices создает подключение к базе данных и возвращает сервисный слой приложения.
 func initServices(ctx context.Context, appConf config.Config) (*services.Services, error) {
 	// Нужно определить тип хранилища
-	var postgresDSN *string
-	if appConf.DatabaseDSN != "" {
-		postgresDSN = &appConf.DatabaseDSN
-	}
 
 	dbConn, connErr := db.NewConnectionFactory(ctx, db.FactoryConfig{
 		StorageType: whatIsDBStorageType(&appConf),
-		PostgresDSN: postgresDSN,
+		PostgresParams: &db.PostgresParams{
+			DSN: appConf.DatabaseDSN,
+		},
 	})
 	if connErr != nil {
 		return nil, connErr //nolint:wrapcheck

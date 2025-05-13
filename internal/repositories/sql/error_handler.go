@@ -9,6 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+const (
+	uniqueViolationCode = "23505"
+)
+
 func convertErrType(err error) error {
 	if err == nil {
 		return nil
@@ -29,5 +33,5 @@ func convertErrType(err error) error {
 }
 
 func isUniqueViolationErr(err *pgconn.PgError) bool {
-	return err.Code == "23505"
+	return err.Code == uniqueViolationCode
 }

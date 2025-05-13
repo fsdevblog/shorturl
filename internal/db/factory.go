@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/golang-migrate/migrate/v4"
+	// driver for migration applying postgres
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	// driver to get migrations from files (*.sql in our case)
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type StorageType string
@@ -13,27 +17,40 @@ type StorageType string
 const (
 	StorageTypePostgres StorageType = "postgres"
 	StorageTypeInMemory StorageType = "inMemory"
+
+	PostgresDefaultMigrationsDir = "internal/db/migrations/"
 )
 
+type PostgresParams struct {
+	DSN           string
+	MigrationsDir string
+}
 type FactoryConfig struct {
-	StorageType StorageType
-	PostgresDSN *string
+	StorageType    StorageType
+	PostgresParams *PostgresParams
 }
 
 func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error) {
 	switch config.StorageType {
 	case StorageTypePostgres:
-		if config.PostgresDSN == nil {
+		if config.PostgresParams == nil {
+			return nil, errors.New("postgres config is empty")
+		} else if config.PostgresParams.DSN == "" {
 			return nil, errors.New("postgres dsn is empty")
 		}
-		pool, err := NewPostgresConnection(ctx, *config.PostgresDSN)
+		pool, err := NewPostgresConnection(ctx, config.PostgresParams.DSN)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create postgres connection: %w", err)
 		}
-		// пока не будем ничего усложнять, а сделаем миграцию прямо здесь
-		migrateErr := simpleMigrateSchema(ctx, pool)
+		// Перед инициализацией postgres, нужно убедится что выполнены все миграции
+		migrationsDir := config.PostgresParams.MigrationsDir
+		if migrationsDir == "" {
+			migrationsDir = PostgresDefaultMigrationsDir
+		}
+
+		migrateErr := postgresMigrate(migrationsDir, config.PostgresParams.DSN)
 		if migrateErr != nil {
-			return nil, fmt.Errorf("failed to migrate schema: %w", migrateErr)
+			return nil, fmt.Errorf("postgres migration: %w", migrateErr)
 		}
 		return pool, nil
 	case StorageTypeInMemory:
@@ -43,19 +60,13 @@ func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error
 	}
 }
 
-// да да, знаю что нужно миграции прикрутить людские). Обязательно сделаю.
-const schemaSQL = `
-CREATE TABLE IF NOT EXISTS urls (
-    id BIGSERIAL PRIMARY KEY,
-    created_at timestamp with time zone DEFAULT NOW(),
-    updated_at timestamp with time zone DEFAULT NOW(),
-    url VARCHAR(512) NOT NULL,
-    short_identifier VARCHAR(8) NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_urls_url_short_identifier ON urls (url, short_identifier);
-`
-
-func simpleMigrateSchema(ctx context.Context, conn *pgxpool.Pool) error {
-	_, err := conn.Exec(ctx, schemaSQL)
-	return err //nolint:wrapcheck
+func postgresMigrate(dir string, dsn string) error {
+	m, mErr := migrate.New("file://"+dir, dsn)
+	if mErr != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", mErr)
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to migrate schema: %w", err)
+	}
+	return nil
 }

@@ -25,7 +25,7 @@ const batchCreateURLQuery = `-- batchCreateURLs
 INSERT INTO urls 
 	(short_identifier, url) 
 VALUES ($1, $2)
-ON CONFLICT (url, short_identifier) 
+ON CONFLICT (url) 
 	DO UPDATE SET updated_at = NOW()
 RETURNING id, created_at, updated_at, short_identifier, url, xmax = 0 AS inserted;
 `
@@ -70,22 +70,21 @@ func (u *URLRepo) BatchCreate(
 const createURLQuery = `-- createURL
 INSERT INTO urls (short_identifier, url) 
 	VALUES ($1, $2) 
-ON CONFLICT (url, short_identifier) 
+ON CONFLICT (url) 
 	DO UPDATE SET updated_at = NOW()
 RETURNING id, created_at, updated_at, short_identifier, url, xmax = 0 AS inserted;
 `
 
-func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (bool, error) {
+func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (*models.URL, bool, error) {
 	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL)
 
 	var m models.URL
 	var inserted bool
 	scanErr := row.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.ShortIdentifier, &m.URL, &inserted)
 	if scanErr != nil {
-		return false, convertErrType(scanErr)
+		return nil, false, convertErrType(scanErr)
 	}
-	*modelURL = m
-	return inserted, nil
+	return &m, inserted, nil
 }
 
 const getByShortIdentifierQuery = `-- getByShortIdentifier

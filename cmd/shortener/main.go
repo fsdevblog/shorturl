@@ -6,11 +6,11 @@ import (
 )
 
 func main() {
-	appConf := config.MustLoad()
+	appConf := config.MustLoadConfig()
 
-	a := app.Must(app.New(appConf))
+	a := app.Must(app.New(*appConf))
 
-	a.Logger.Debugf("Starting server with config %+v", *appConf)
+	a.Logger.Debugf("Starting server with config %+v", appConf)
 	if err := a.Run(); err != nil {
 		panic(err)
 	}

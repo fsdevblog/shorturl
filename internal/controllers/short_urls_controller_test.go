@@ -3,6 +3,7 @@ package controllers
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,13 +13,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brianvoe/gofakeit/v7"
+
+	"github.com/fsdevblog/shorturl/internal/controllers/mocksctrl"
+	"github.com/golang/mock/gomock"
+
 	"github.com/fsdevblog/shorturl/internal/logs"
 
 	"github.com/fsdevblog/shorturl/internal/services"
 
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/models"
-	"github.com/fsdevblog/shorturl/internal/services/smocks"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
@@ -33,30 +38,160 @@ const (
 
 type ShortURLControllerSuite struct {
 	suite.Suite
-	urlServMock *smocks.URLMock
-	router      *gin.Engine
-	config      *config.Config
+	mockShortURLStore *mocksctrl.MockShortURLStore
+	router            *gin.Engine
+	config            *config.Config
 }
 
 func (s *ShortURLControllerSuite) SetupTest() {
-	s.urlServMock = new(smocks.URLMock)
+	mockShortURL := gomock.NewController(s.T())
+	defer mockShortURL.Finish()
+
+	s.mockShortURLStore = mocksctrl.NewMockShortURLStore(mockShortURL)
+
 	appConf := config.Config{
 		ServerAddress: ":80",
 		BaseURL:       &url.URL{Scheme: "http", Host: "test.com:8080"},
 	}
 	s.config = &appConf
-	logger := logs.New(os.Stdout)
-	s.router = SetupRouter(s.urlServMock, &appConf, logger)
+	s.router = SetupRouter(RouterParams{
+		URLService:  s.mockShortURLStore,
+		PingService: nil,
+		AppConf:     appConf,
+		Logger:      logs.New(os.Stdout),
+	})
+}
+
+func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
+	if seedErr := gofakeit.Seed(0); seedErr != nil {
+		s.T().Fatal(seedErr)
+	}
+
+	uniqData := s.prepareTestForCreateBatch(3, true)
+	notUniqData := s.prepareTestForCreateBatch(3, false)
+
+	tests := []struct {
+		name           string
+		wantStatus     int
+		requestPayload []BatchCreateParams
+		mockResponse   *services.BatchCreateShortURLsResponse
+		apiResponse    []BatchCreateResponse
+	}{
+		{name: "uniq urls", wantStatus: http.StatusCreated, requestPayload: uniqData.requestPayload,
+			mockResponse: uniqData.mockResponse, apiResponse: uniqData.apiExpectResponse},
+		{name: "not uniq", wantStatus: http.StatusConflict, requestPayload: notUniqData.requestPayload,
+			mockResponse: notUniqData.mockResponse, apiResponse: notUniqData.apiExpectResponse},
+	}
+
+	for _, t := range tests {
+		s.Run(t.name, func() {
+			s.mockShortURLStore.EXPECT().
+				BatchCreate(gomock.Any(), gomock.Any()).
+				Return(t.mockResponse, nil).
+				Times(1)
+
+			payload, _ := json.Marshal(t.requestPayload)
+			res := s.makeRequest(requestFields{
+				Method:      http.MethodPost,
+				URL:         "/api/shorten/batch",
+				Body:        bytes.NewReader(payload),
+				ContentType: "application/json",
+				Gzipped:     true,
+			})
+
+			defer func() {
+				closeErr := res.Body.Close()
+				s.Require().NoError(closeErr)
+			}()
+
+			body, readBodyErr := readBody(res.Body, true)
+			s.Require().NoError(readBodyErr)
+
+			s.Equal(t.wantStatus, res.StatusCode)
+
+			var respBody []BatchCreateResponse
+			bodyJSONErr := json.Unmarshal(body, &respBody)
+
+			s.Require().NoError(bodyJSONErr)
+
+			s.Equal(t.apiResponse, respBody)
+		})
+	}
+}
+
+type prepareTestDataForCreateBatch struct {
+	mockResponse      *services.BatchCreateShortURLsResponse
+	apiExpectResponse []BatchCreateResponse
+	requestPayload    []BatchCreateParams
+}
+
+func (s *ShortURLControllerSuite) prepareTestForCreateBatch(batchSize int, isUniq bool) *prepareTestDataForCreateBatch {
+	var urls = make([]string, 0, batchSize)
+	for range batchSize {
+		urls = append(urls, gofakeit.URL())
+	}
+
+	var reqData = make([]BatchCreateParams, batchSize)
+	batchResponse := services.NewBatchExecResponseURL(
+		services.NewBatchExecResponse[models.URL](batchSize),
+	)
+	var expectedResponse = make([]BatchCreateResponse, batchSize)
+
+	for i, rawURL := range urls {
+		reqData[i] = BatchCreateParams{
+			CorrelationID: gofakeit.UUID(),
+			OriginalURL:   rawURL,
+		}
+		randSid, _ := gofakeit.Generate("????????")
+		item := models.URL{
+			URL:             rawURL,
+			ShortIdentifier: randSid,
+		}
+
+		var rErr error
+		if !isUniq && i == len(urls)-1 {
+			// Симулируем поведение при неуникальной ссылке на последней итерации.
+			rErr = services.ErrDuplicateKey
+		}
+		batchResponse.Set(services.BatchResponseItem[models.URL]{
+			Item: item,
+			Err:  rErr,
+		}, i)
+
+		expectedResponse[i] = BatchCreateResponse{
+			CorrelationID: reqData[i].CorrelationID,
+			ShortURL:      s.genShortURLForSid(randSid),
+		}
+	}
+
+	return &prepareTestDataForCreateBatch{
+		mockResponse:      batchResponse,
+		apiExpectResponse: expectedResponse,
+		requestPayload:    reqData,
+	}
 }
 
 //nolint:gocognit
 func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
+	notUniqURL := "https://test.com/not_uniq"
 	invalidURL := "https://test .com/valid"
 	shortIdentifier := "12345678"
 
-	s.urlServMock.On("Create", validURL).
-		Return(&models.URL{ShortIdentifier: shortIdentifier, URL: validURL}, nil)
+	s.mockShortURLStore.EXPECT().
+		Create(gomock.Any(), validURL).
+		Return(&models.URL{
+			URL:             validURL,
+			ShortIdentifier: shortIdentifier,
+		}, true, nil).MinTimes(1)
+
+	s.mockShortURLStore.EXPECT().
+		Create(gomock.Any(), notUniqURL).
+		Return(&models.URL{
+			URL:             notUniqURL,
+			ShortIdentifier: shortIdentifier,
+		}, false, nil).
+		MinTimes(1)
 
 	tests := []struct {
 		name       string
@@ -65,6 +200,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	}{
 		{name: "valid", redirectTo: validURL, wantStatus: http.StatusCreated},
 		{name: "invalid", redirectTo: invalidURL, wantStatus: http.StatusUnprocessableEntity},
+		{name: "not_uniq", redirectTo: notUniqURL, wantStatus: http.StatusConflict},
 	}
 
 	jsonFn := func(to string) io.Reader {
@@ -105,7 +241,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 
 				s.Equal(tt.wantStatus, res.StatusCode)
 
-				if tt.wantStatus == http.StatusCreated {
+				if tt.wantStatus == http.StatusCreated || tt.wantStatus == http.StatusConflict {
 					body, bErr := readBody(res.Body, r.gzip)
 
 					if bErr != nil {
@@ -115,7 +251,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 					if r.rType == JSONCType {
 						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL.String(), shortIdentifier)
 					} else {
-						shortURL = fmt.Sprintf("%s/%s", s.config.BaseURL.String(), shortIdentifier)
+						shortURL = s.genShortURLForSid(shortIdentifier)
 					}
 					s.Equal(shortURL, string(body))
 				}
@@ -135,11 +271,15 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 
 	redirectTo := "https://test.com/test/123"
 
-	s.urlServMock.On("GetByShortIdentifier", validShortID).
-		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil)
+	s.mockShortURLStore.EXPECT().
+		GetByShortIdentifier(gomock.Any(), validShortID).
+		Return(&models.URL{ShortIdentifier: validShortID, URL: redirectTo}, nil).
+		Times(1)
 
-	s.urlServMock.On("GetByShortIdentifier", notExistShortID).
-		Return(nil, services.ErrRecordNotFound)
+	s.mockShortURLStore.EXPECT().
+		GetByShortIdentifier(gomock.Any(), notExistShortID).
+		Return(nil, services.ErrRecordNotFound).
+		Times(1)
 
 	tests := []struct {
 		name       string
@@ -175,7 +315,6 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 			}
 		})
 	}
-	s.urlServMock.AssertNumberOfCalls(s.T(), "GetByShortIdentifier", 2)
 }
 
 func (s *ShortURLControllerSuite) Test_validateURL() {
@@ -267,6 +406,10 @@ func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Respon
 
 func TestShortURLControllerSuite(t *testing.T) {
 	suite.Run(t, new(ShortURLControllerSuite))
+}
+
+func (s *ShortURLControllerSuite) genShortURLForSid(sid string) string {
+	return fmt.Sprintf("%s/%s", s.config.BaseURL.String(), sid)
 }
 
 func unGzip(r io.Reader) ([]byte, error) {

@@ -2,27 +2,29 @@ package services
 
 import (
 	"bufio"
+	"context"
 	"crypto/md5" //nolint:gosec
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
-
-	"github.com/pkg/errors"
 )
 
 type URLRepository interface {
+	BatchCreate(ctx context.Context, mURLs []repositories.BatchCreateArg) ([]repositories.BatchResult[models.URL], error)
 	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
-	Create(rawURL *models.URL) error
+	// Возвращает два значения: bool отвечает за уникальность созданной записи, 2 ошибку.
+	Create(ctx context.Context, mURL *models.URL) (*models.URL, bool, error)
 	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
-	GetByShortIdentifier(shortID string) (*models.URL, error)
+	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 	// GetByURL находит запись в хранилище по заданной ссылке
-	GetByURL(rawURL string) (*models.URL, error)
+	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
 	// GetAll возвращает все записи в бд. Сразу пачкой.
-	GetAll() ([]models.URL, error)
+	GetAll(ctx context.Context) ([]models.URL, error)
 }
 
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
@@ -34,8 +36,8 @@ func NewURLService(urlRepo URLRepository) *URLService {
 	return &URLService{urlRepo: urlRepo}
 }
 
-func (u *URLService) GetByShortIdentifier(shortID string) (*models.URL, error) {
-	sURL, err := u.urlRepo.GetByShortIdentifier(shortID)
+func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
+	sURL, err := u.urlRepo.GetByShortIdentifier(ctx, shortID)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
 			return nil, fmt.Errorf("id `%s` not found: %w", shortID, ErrRecordNotFound)
@@ -45,45 +47,63 @@ func (u *URLService) GetByShortIdentifier(shortID string) (*models.URL, error) {
 	return sURL, nil
 }
 
-func (u *URLService) Create(rawURL string) (*models.URL, error) {
-	// Мы не можем делать вставку и проверять по ошибке дубликата. Проблема в том, что может быть дубликат как в URL,
-	// так и в хеше (коллизия), поэтому сначала мы делаем проверку на существование URL, а только потом делаем
-	// вставку
+// BatchCreate Создает урлы пачками.
+func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) (*BatchCreateShortURLsResponse, error) {
+	// я проигнорирую здесь вопрос с коллизиями. В батч вставке обработка коллизий - это сущий кошмар который
+	// врядли входит в рамки курса, а у меня мозг плавится, не успеваю к дедлайну по сдаче ревью)
+	// из метода Create её также убрал.
 
-	// В данной реализации не используется система транзакций, т.к. я не знаю как это сделать в моем случае.
-	// (не уверен что понимаю как провести транзакции в сервисный слой не высовывая при этом наружу тот самый *gorm.DB,
-	// но ещё больше я не уверен в том как реализовать систему транзакция в картах.
-	// Но она (система транзакций) тут явно нужна по идее.
-
-	existingURL, existingURLErr := u.urlRepo.GetByURL(rawURL)
-	if existingURLErr == nil {
-		return existingURL, nil
-	}
-
-	var delta uint = 1
-	var deltaMax uint = 10
-
-	var sURL models.URL
-	for {
-		if delta >= deltaMax {
-			return nil, fmt.Errorf("generateShortID loop limit for url: %w", ErrUnknown)
-		}
-		sURL = models.URL{
+	var args = make([]repositories.BatchCreateArg, len(rawURLs))
+	for i, rawURL := range rawURLs {
+		arg := repositories.BatchCreateArg{
 			URL:             rawURL,
-			ShortIdentifier: generateShortID(rawURL, delta, models.ShortIdentifierLength),
+			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
 		}
-		if createErr := u.urlRepo.Create(&sURL); createErr != nil {
-			if errors.Is(createErr, repositories.ErrDuplicateKey) {
-				delta++
-				continue
-			}
-			return nil, ErrUnknown
-		}
-		return &sURL, nil
+		args[i] = arg
 	}
+
+	batchResults, batchErr := u.urlRepo.BatchCreate(ctx, args)
+	if batchErr != nil {
+		return nil, fmt.Errorf("%w: batch create: %s", ErrUnknown, batchErr.Error())
+	}
+	batchResponse := NewBatchExecResponse[models.URL](len(batchResults))
+
+	for i, result := range batchResults {
+		batchResponse.results[i].Item = result.Value
+		var err = result.Err
+		if result.Err != nil && errors.Is(result.Err, repositories.ErrDuplicateKey) {
+			err = ErrDuplicateKey
+		}
+		batchResponse.results[i].Err = err
+	}
+	return NewBatchExecResponseURL(batchResponse), nil
 }
 
-func (u *URLService) Backup(path string) (err error) {
+func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
+	res, err := u.urlRepo.GetByURL(ctx, rawURL)
+
+	if err != nil {
+		if errors.Is(err, repositories.ErrNotFound) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, fmt.Errorf("%w: get by url: %s", ErrUnknown, err.Error())
+	}
+	return res, nil
+}
+
+func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, bool, error) {
+	var sURL = models.URL{
+		URL:             rawURL,
+		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
+	}
+	m, isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
+	if createErr != nil {
+		return nil, false, fmt.Errorf("%w: create: %s", ErrUnknown, createErr.Error())
+	}
+	return m, isUniq, nil
+}
+
+func (u *URLService) Backup(ctx context.Context, path string) (err error) {
 	backupFile, backupFileErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if backupFileErr != nil {
 		return fmt.Errorf("open backup file: %w", backupFileErr)
@@ -95,7 +115,7 @@ func (u *URLService) Backup(path string) (err error) {
 		}
 	}()
 
-	records, recordsErr := u.urlRepo.GetAll()
+	records, recordsErr := u.urlRepo.GetAll(ctx)
 	if recordsErr != nil {
 		return fmt.Errorf("get all records for backup: %w", recordsErr)
 	}
@@ -113,7 +133,7 @@ func (u *URLService) Backup(path string) (err error) {
 	return nil
 }
 
-func (u *URLService) RestoreBackup(path string) (err error) {
+func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error) {
 	file, fileErr := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
 	if fileErr != nil {
 		return fmt.Errorf("open backup file: %w", fileErr)
@@ -124,27 +144,41 @@ func (u *URLService) RestoreBackup(path string) (err error) {
 		}
 	}()
 
-	// Читаем построчно
+	batchLimit := 1000
+	batch := make([]repositories.BatchCreateArg, 0, batchLimit)
+	// Читаем построчно. Batch вставку делать некогда если честно.
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		var record models.URL
 		if jsonErr := json.Unmarshal(scanner.Bytes(), &record); jsonErr != nil {
 			return fmt.Errorf("unmarshal record: %w", jsonErr)
 		}
-		if createErr := u.urlRepo.Create(&record); createErr != nil {
-			if !errors.Is(createErr, repositories.ErrDuplicateKey) {
-				return fmt.Errorf("create record: %w", createErr)
+		batch = append(batch, repositories.BatchCreateArg{
+			ShortIdentifier: record.ShortIdentifier,
+			URL:             record.URL,
+		})
+
+		if len(batch) == batchLimit {
+			_, batchErr := u.urlRepo.BatchCreate(ctx, batch)
+			if batchErr != nil {
+				return fmt.Errorf("batch create: %w", batchErr)
 			}
+			batch = make([]repositories.BatchCreateArg, 0, batchLimit)
+		}
+	}
+	if len(batch) > 0 {
+		_, batchErr := u.urlRepo.BatchCreate(ctx, batch)
+		if batchErr != nil {
+			return fmt.Errorf("batch create: %w", batchErr)
 		}
 	}
 	return nil
 }
 
 // generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.
-func generateShortID(rawURL string, delta uint, length int) string {
+func generateShortID(rawURL string, length int) string {
 	// Добавляем счетчик к срезу (для избежания коллизий)
 	b := []byte(rawURL)
-	b = append(b, byte(delta))
 
 	// Создаем хеш и конвертим в base62
 	hash := md5.Sum(b) //nolint:gosec

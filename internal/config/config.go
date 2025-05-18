@@ -17,6 +17,8 @@ type Config struct {
 	BaseURL *url.URL `env:"BASE_URL"`
 	// DSN базы данных
 	DatabaseDSN string `env:"DATABASE_DSN"`
+	// Секретный ключ для JWT токена посетителей.
+	VisitorJWTSecret string `env:"VISITOR_JWT_SECRET" envDefault:"super_secret_key"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -69,14 +71,15 @@ func loadsFlags(flagsConfig *Config) {
 // mergeConfig сливает структуры для env и флагов.
 func mergeConfig(envConfig, flagsConfig *Config) *Config {
 	return &Config{
-		ServerAddress:   defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
-		BaseURL:         defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
-		DatabaseDSN:     defaultIfBlank[string](envConfig.DatabaseDSN, flagsConfig.DatabaseDSN),
-		FileStoragePath: defaultIfBlank[string](envConfig.FileStoragePath, flagsConfig.FileStoragePath),
+		ServerAddress:    defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
+		BaseURL:          defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
+		DatabaseDSN:      defaultIfBlank[string](envConfig.DatabaseDSN, flagsConfig.DatabaseDSN),
+		FileStoragePath:  defaultIfBlank[string](envConfig.FileStoragePath, flagsConfig.FileStoragePath),
+		VisitorJWTSecret: envConfig.VisitorJWTSecret,
 	}
 }
 
-func defaultIfBlank[T any](value T, defaultValue T) T {
+func defaultIfBlank[T string | *url.URL](value T, defaultValue T) T {
 	if v, ok := any(value).(string); ok && v == "" {
 		return defaultValue
 	}

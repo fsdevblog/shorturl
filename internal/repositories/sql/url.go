@@ -23,11 +23,11 @@ func NewURLRepo(conn *pgxpool.Pool) *URLRepo {
 
 const batchCreateURLQuery = `-- batchCreateURLs
 INSERT INTO urls 
-	(short_identifier, url) 
-VALUES ($1, $2)
+	(short_identifier, url, visitor_uuid) 
+VALUES ($1, $2, $3)
 ON CONFLICT (url) 
 	DO UPDATE SET updated_at = NOW()
-RETURNING id, created_at, updated_at, short_identifier, url, xmax = 0 AS inserted;
+RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `
 
 func (u *URLRepo) BatchCreate(
@@ -37,7 +37,7 @@ func (u *URLRepo) BatchCreate(
 	batch := new(pgx.Batch)
 
 	for _, arg := range args {
-		vals := []interface{}{arg.ShortIdentifier, arg.URL}
+		vals := []interface{}{arg.ShortIdentifier, arg.URL, arg.VisitorUUID}
 		batch.Queue(batchCreateURLQuery, vals...)
 	}
 	bResults := u.conn.SendBatch(ctx, batch)
@@ -51,6 +51,7 @@ func (u *URLRepo) BatchCreate(
 			&m.Value.UpdatedAt,
 			&m.Value.ShortIdentifier,
 			&m.Value.URL,
+			&m.Value.VisitorUUID,
 			&inserted,
 		)
 		if err != nil {
@@ -68,19 +69,19 @@ func (u *URLRepo) BatchCreate(
 }
 
 const createURLQuery = `-- createURL
-INSERT INTO urls (short_identifier, url) 
-	VALUES ($1, $2) 
+INSERT INTO urls (short_identifier, url, visitor_uuid) 
+	VALUES ($1, $2, $3) 
 ON CONFLICT (url) 
 	DO UPDATE SET updated_at = NOW()
-RETURNING id, created_at, updated_at, short_identifier, url, xmax = 0 AS inserted;
+RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `
 
 func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (*models.URL, bool, error) {
-	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL)
+	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL, modelURL.VisitorUUID)
 
 	var m models.URL
 	var inserted bool
-	scanErr := row.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.ShortIdentifier, &m.URL, &inserted)
+	scanErr := row.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.ShortIdentifier, &m.URL, &m.VisitorUUID, &inserted)
 	if scanErr != nil {
 		return nil, false, convertErrType(scanErr)
 	}
@@ -88,27 +89,49 @@ func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (*models.URL
 }
 
 const getByShortIdentifierQuery = `-- getByShortIdentifier
-SELECT id, short_identifier, url FROM urls WHERE short_identifier = $1;
+SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE short_identifier = $1;
 `
 
 func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
 	row := u.conn.QueryRow(ctx, getByShortIdentifierQuery, shortID)
 	var m models.URL
-	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID)
 	if scanErr != nil {
 		return nil, convertErrType(scanErr)
 	}
 	return &m, nil
 }
 
+const getAllByVisitorUUIDQuery = `-- getAllByVisitorUUID
+SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE visitor_uuid = $1;
+`
+
+func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
+	rows, qErr := u.conn.Query(ctx, getAllByVisitorUUIDQuery, visitorUUID)
+	if qErr != nil {
+		return nil, convertErrType(qErr)
+	}
+	defer rows.Close()
+	var urls []models.URL
+	for rows.Next() {
+		var m models.URL
+		if err := rows.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID); err != nil {
+			return nil, convertErrType(err)
+		}
+		urls = append(urls, m)
+	}
+
+	return urls, nil
+}
+
 const getByURLQuery = `-- getByURL
-SELECT id, short_identifier, url FROM urls WHERE url = $1;
+SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE url = $1;
 `
 
 func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
 	row := u.conn.QueryRow(ctx, getByURLQuery, rawURL)
 	var m models.URL
-	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL)
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID)
 	if scanErr != nil {
 		return nil, convertErrType(scanErr)
 	}
@@ -116,7 +139,7 @@ func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, err
 }
 
 const getAllURLsQuery = `-- getAllURLs
-SELECT id, short_identifier, url FROM urls;;
+SELECT id, short_identifier, url, visitor_uuid FROM urls;;
 `
 
 func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
@@ -128,7 +151,7 @@ func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var m models.URL
-		if err := rows.Scan(&m.ID, &m.ShortIdentifier, &m.URL); err != nil {
+		if err := rows.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID); err != nil {
 			return nil, convertErrType(err)
 		}
 		urls = append(urls, m)

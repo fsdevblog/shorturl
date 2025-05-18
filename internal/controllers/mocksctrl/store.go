@@ -74,24 +74,24 @@ func (m *MockShortURLStore) EXPECT() *MockShortURLStoreMockRecorder {
 }
 
 // BatchCreate mocks base method.
-func (m *MockShortURLStore) BatchCreate(ctx context.Context, rawURLs []string) (*services.BatchCreateShortURLsResponse, error) {
+func (m *MockShortURLStore) BatchCreate(ctx context.Context, visitorUUID *string, rawURLs []string) (*services.BatchCreateShortURLsResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BatchCreate", ctx, rawURLs)
+	ret := m.ctrl.Call(m, "BatchCreate", ctx, visitorUUID, rawURLs)
 	ret0, _ := ret[0].(*services.BatchCreateShortURLsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // BatchCreate indicates an expected call of BatchCreate.
-func (mr *MockShortURLStoreMockRecorder) BatchCreate(ctx, rawURLs interface{}) *gomock.Call {
+func (mr *MockShortURLStoreMockRecorder) BatchCreate(ctx, visitorUUID, rawURLs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockShortURLStore)(nil).BatchCreate), ctx, rawURLs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockShortURLStore)(nil).BatchCreate), ctx, visitorUUID, rawURLs)
 }
 
 // Create mocks base method.
-func (m *MockShortURLStore) Create(ctx context.Context, rawURL string) (*models.URL, bool, error) {
+func (m *MockShortURLStore) Create(ctx context.Context, visitorUUID *string, rawURL string) (*models.URL, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, rawURL)
+	ret := m.ctrl.Call(m, "Create", ctx, visitorUUID, rawURL)
 	ret0, _ := ret[0].(*models.URL)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -99,9 +99,24 @@ func (m *MockShortURLStore) Create(ctx context.Context, rawURL string) (*models.
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockShortURLStoreMockRecorder) Create(ctx, rawURL interface{}) *gomock.Call {
+func (mr *MockShortURLStoreMockRecorder) Create(ctx, visitorUUID, rawURL interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockShortURLStore)(nil).Create), ctx, rawURL)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockShortURLStore)(nil).Create), ctx, visitorUUID, rawURL)
+}
+
+// GetAllByVisitorUUID mocks base method.
+func (m *MockShortURLStore) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllByVisitorUUID", ctx, visitorUUID)
+	ret0, _ := ret[0].([]models.URL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllByVisitorUUID indicates an expected call of GetAllByVisitorUUID.
+func (mr *MockShortURLStoreMockRecorder) GetAllByVisitorUUID(ctx, visitorUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllByVisitorUUID", reflect.TypeOf((*MockShortURLStore)(nil).GetAllByVisitorUUID), ctx, visitorUUID)
 }
 
 // GetByShortIdentifier mocks base method.

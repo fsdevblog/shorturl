@@ -30,6 +30,7 @@ func (u *URLRepo) BatchCreate(
 		collection[m.ShortIdentifier] = &models.URL{
 			URL:             m.URL,
 			ShortIdentifier: m.ShortIdentifier,
+			VisitorUUID:     m.VisitorUUID,
 		}
 	}
 	br := memory.BatchSet[models.URL](ctx, collection, u.s.MStorage)
@@ -40,6 +41,7 @@ func (u *URLRepo) BatchCreate(
 			Value: models.URL{
 				URL:             collection[r.Key].URL,
 				ShortIdentifier: collection[r.Key].ShortIdentifier,
+				VisitorUUID:     collection[r.Key].VisitorUUID,
 			},
 			Err: convertErrorType(r.Err),
 		}
@@ -71,6 +73,22 @@ func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*mo
 		)
 	}
 	return url, nil
+}
+
+func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
+	data, err := memory.FilterAll[models.URL](ctx, u.s.MStorage, func(val models.URL) bool {
+		if val.VisitorUUID == nil {
+			return false
+		}
+		return *val.VisitorUUID == visitorUUID
+	})
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get record by visitor uuid %s: %w",
+			visitorUUID, convertErrorType(err),
+		)
+	}
+	return data, nil
 }
 
 func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {

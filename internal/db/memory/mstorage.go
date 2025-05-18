@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/goccy/go-json"
-	"github.com/sirupsen/logrus"
 )
 
 // MStorage реализация хранилища в памяти.
@@ -106,30 +105,45 @@ func Set[T any](ctx context.Context, key string, val *T, m *MStorage) error {
 	}
 }
 
-func GetAll[T any](ctx context.Context, m *MStorage) ([]T, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err() //nolint:wrapcheck
-	default:
-		m.m.RLock()
-		defer m.m.RUnlock()
-
-		var result = make([]T, 0, len(m.data))
-
-		for _, bytes := range m.data {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err() //nolint:wrapcheck
-			default:
-			}
-
+func FilterAll[T any](ctx context.Context, m *MStorage, fn func(T) bool) ([]T, error) {
+	m.m.RLock()
+	defer m.m.RUnlock()
+	var result = make([]T, 0, len(m.data))
+	for _, bytes := range m.data {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err() //nolint:wrapcheck
+		default:
 			var val T
 			if err := json.Unmarshal(bytes, &val); err != nil {
-				logrus.WithError(err).Errorf("failed to unmarshal json for object `%+v`", val)
-				continue
+				return nil, fmt.Errorf("failed to unmarshal json for object `%+v`: %w", val, err)
 			}
-			result = append(result, val)
+			if fn(val) {
+				result = append(result, val)
+			}
 		}
-		return result, nil
 	}
+	return result, nil
+}
+
+func GetAll[T any](ctx context.Context, m *MStorage) ([]T, error) {
+	m.m.RLock()
+	defer m.m.RUnlock()
+
+	var result = make([]T, 0, len(m.data))
+
+	for _, bytes := range m.data {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err() //nolint:wrapcheck
+		default:
+		}
+
+		var val T
+		if err := json.Unmarshal(bytes, &val); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal json for object `%+v`: %w", val, err)
+		}
+		result = append(result, val)
+	}
+	return result, nil
 }

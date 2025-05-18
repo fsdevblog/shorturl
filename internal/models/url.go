@@ -10,4 +10,5 @@ type URL struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 	URL             string    `json:"url"`
 	ShortIdentifier string    `json:"shortIdentifier"`
+	VisitorUUID     *string   `json:"visitorUUID"`
 }

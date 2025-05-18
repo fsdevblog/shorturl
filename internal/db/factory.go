@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	// driver for migration applying postgres
+	// driver for migration applying postgres.
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	// driver to get migrations from files (*.sql in our case)
+	// driver to get migrations from files (*.sql in our case).
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 

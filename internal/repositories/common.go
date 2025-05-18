@@ -8,4 +8,5 @@ type BatchResult[T any] struct {
 type BatchCreateArg struct {
 	ShortIdentifier string
 	URL             string
+	VisitorUUID     *string
 }

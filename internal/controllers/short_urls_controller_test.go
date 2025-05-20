@@ -12,8 +12,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
+	"github.com/fsdevblog/shorturl/internal/tokens"
 
 	"github.com/fsdevblog/shorturl/internal/controllers/mocksctrl"
 	"github.com/golang/mock/gomock"
@@ -34,6 +36,7 @@ type CType string
 const (
 	JSONCType   CType = "json"
 	URLEncCType CType = "urlencoded"
+	jwtSecret         = "test secret"
 )
 
 type ShortURLControllerSuite struct {
@@ -47,11 +50,16 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	mockShortURL := gomock.NewController(s.T())
 	defer mockShortURL.Finish()
 
+	if seedErr := gofakeit.Seed(0); seedErr != nil {
+		s.T().Fatal(seedErr)
+	}
+
 	s.mockShortURLStore = mocksctrl.NewMockShortURLStore(mockShortURL)
 
 	appConf := config.Config{
-		ServerAddress: ":80",
-		BaseURL:       &url.URL{Scheme: "http", Host: "test.com:8080"},
+		ServerAddress:    ":80",
+		BaseURL:          &url.URL{Scheme: "http", Host: "test.com:8080"},
+		VisitorJWTSecret: jwtSecret,
 	}
 	s.config = &appConf
 	s.router = SetupRouter(RouterParams{
@@ -86,18 +94,19 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateBatch() {
 	for _, t := range tests {
 		s.Run(t.name, func() {
 			s.mockShortURLStore.EXPECT().
-				BatchCreate(gomock.Any(), gomock.Any()).
+				BatchCreate(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(t.mockResponse, nil).
 				Times(1)
 
 			payload, _ := json.Marshal(t.requestPayload)
 			res := s.makeRequest(requestFields{
-				Method:      http.MethodPost,
-				URL:         "/api/shorten/batch",
-				Body:        bytes.NewReader(payload),
-				ContentType: "application/json",
-				Gzipped:     true,
-			})
+				Method: http.MethodPost,
+				URL:    "/api/shorten/batch",
+				Body:   bytes.NewReader(payload),
+			},
+				withContentType("application/json"),
+				withGzip(true),
+			)
 
 			defer func() {
 				closeErr := res.Body.Close()
@@ -171,6 +180,67 @@ func (s *ShortURLControllerSuite) prepareTestForCreateBatch(batchSize int, isUni
 	}
 }
 
+func (s *ShortURLControllerSuite) TestShortURLController_UserURLs() {
+	visitorWithURLs := gofakeit.UUID()
+	jwtTokenWithURLs, jwtTokenWithURLsErr := tokens.GenerateVisitorJWT(visitorWithURLs, time.Hour,
+		[]byte(s.config.VisitorJWTSecret))
+
+	s.Require().NoError(jwtTokenWithURLsErr)
+
+	visitorWithoutURLs := gofakeit.UUID()
+	jwtTokenWithoutURLs, jwtTokenWithoutURLsErr := tokens.GenerateVisitorJWT(visitorWithoutURLs, time.Hour,
+		[]byte(s.config.VisitorJWTSecret))
+
+	s.Require().NoError(jwtTokenWithoutURLsErr)
+
+	s.mockShortURLStore.EXPECT().GetAllByVisitorUUID(gomock.Any(), visitorWithURLs).
+		Return([]models.URL{
+			{
+				ShortIdentifier: "12345678",
+				URL:             "https://test.com/test/123",
+			},
+			{
+				ShortIdentifier: "12345679",
+				URL:             "https://test.com/test/124",
+			},
+		}, nil)
+
+	s.mockShortURLStore.
+		EXPECT().
+		GetAllByVisitorUUID(gomock.Any(), visitorWithoutURLs).Return([]models.URL{}, nil)
+
+	tests := []struct {
+		name       string
+		token      string
+		wantStatus int
+	}{
+		{name: "with_urls", wantStatus: http.StatusOK, token: jwtTokenWithURLs},
+		{name: "without_urls", wantStatus: http.StatusNoContent, token: jwtTokenWithoutURLs},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			res := s.makeRequest(requestFields{
+				Method: http.MethodGet,
+				URL:    "/api/user/urls",
+			},
+				withCookies([]*http.Cookie{
+					{
+						Name:  "visitor",
+						Value: tt.token,
+					},
+				}),
+			)
+			defer func() {
+				if err := res.Body.Close(); err != nil {
+					s.T().Fatal(err)
+				}
+			}()
+			s.Equalf(tt.wantStatus, res.StatusCode,
+				"%s wrong status code, want %d, got %d", tt.name, tt.wantStatus, res.StatusCode)
+		})
+	}
+}
+
 //nolint:gocognit
 func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	validURL := "https://test.com/valid"
@@ -179,14 +249,14 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 	shortIdentifier := "12345678"
 
 	s.mockShortURLStore.EXPECT().
-		Create(gomock.Any(), validURL).
+		Create(gomock.Any(), gomock.Any(), validURL).
 		Return(&models.URL{
 			URL:             validURL,
 			ShortIdentifier: shortIdentifier,
 		}, true, nil).MinTimes(1)
 
 	s.mockShortURLStore.EXPECT().
-		Create(gomock.Any(), notUniqURL).
+		Create(gomock.Any(), gomock.Any(), notUniqURL).
 		Return(&models.URL{
 			URL:             notUniqURL,
 			ShortIdentifier: shortIdentifier,
@@ -226,12 +296,13 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 		for _, tt := range tests {
 			s.Run(tt.name, func() {
 				res := s.makeRequest(requestFields{
-					Method:      http.MethodPost,
-					URL:         r.uri,
-					Body:        r.bodyFn(tt.redirectTo),
-					ContentType: r.contentType,
-					Gzipped:     r.gzip,
-				})
+					Method: http.MethodPost,
+					URL:    r.uri,
+					Body:   r.bodyFn(tt.redirectTo),
+				},
+					withContentType(r.contentType),
+					withGzip(r.gzip),
+				)
 
 				defer func() {
 					if err := res.Body.Close(); err != nil {
@@ -268,6 +339,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 	validShortID := "12345678"
 	notExistShortID := "12345671"
 	inValidShortID := "123"
+	deletedSID := "deleted1"
 
 	redirectTo := "https://test.com/test/123"
 
@@ -280,6 +352,14 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		GetByShortIdentifier(gomock.Any(), notExistShortID).
 		Return(nil, services.ErrRecordNotFound).
 		Times(1)
+	now := time.Now()
+	s.mockShortURLStore.EXPECT().
+		GetByShortIdentifier(gomock.Any(), deletedSID).
+		Return(&models.URL{
+			DeletedAt:       &now,
+			URL:             gofakeit.URL(),
+			ShortIdentifier: deletedSID,
+		}, nil)
 
 	tests := []struct {
 		name       string
@@ -290,6 +370,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		{name: "invalid", requestURI: inValidShortID, wantStatus: http.StatusNotFound},
 		{name: "notExistShortID", requestURI: notExistShortID, wantStatus: http.StatusNotFound},
 		{name: "root page", requestURI: "", wantStatus: http.StatusNotFound},
+		{name: "deleted", requestURI: deletedSID, wantStatus: http.StatusGone},
 	}
 
 	for _, tt := range tests {
@@ -299,7 +380,6 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 				URL:    "/" + tt.requestURI,
 			})
 
-			// в тестах мне кажется можно опускать обработку Close.
 			defer func() {
 				if err := res.Body.Close(); err != nil {
 					s.T().Fatal(err)
@@ -313,6 +393,71 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 			} else {
 				s.Empty(res.Header.Get("Location"))
 			}
+		})
+	}
+}
+
+func (s *ShortURLControllerSuite) TestShortURLController_DeleteUserURLs() {
+	size := 100
+	visitorUUID := gofakeit.UUID()
+	jwtTokenString, jwtTokenErr := tokens.GenerateVisitorJWT(visitorUUID, time.Hour,
+		[]byte(s.config.VisitorJWTSecret))
+
+	s.Require().NoError(jwtTokenErr)
+	var validShortIDs = make([]string, 0, size)
+	for range size {
+		gen, genErr := gofakeit.Generate("????????")
+		if genErr != nil {
+			s.Require().NoError(genErr)
+		}
+		validShortIDs = append(validShortIDs, gen)
+	}
+	withUnexistShortID := append(validShortIDs, "un_exist") //nolint:gocritic
+
+	// в обоих случаях должен вернуться статус 202, независимо от того существуют записи или нет.
+	var tests = []struct {
+		name       string
+		wantStatus int
+		shortIDs   []string
+	}{
+		{
+			name:       "exist ids",
+			wantStatus: http.StatusAccepted,
+			shortIDs:   validShortIDs,
+		}, {
+			name:       "not exist ids",
+			wantStatus: http.StatusAccepted,
+			shortIDs:   withUnexistShortID,
+		},
+	}
+
+	s.mockShortURLStore.EXPECT().MarkAsDeleted(gomock.Any(), validShortIDs, visitorUUID).Return(nil)
+	s.mockShortURLStore.EXPECT().MarkAsDeleted(gomock.Any(), withUnexistShortID, visitorUUID).Return(nil)
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			res := s.makeRequest(requestFields{
+				Method: http.MethodDelete,
+				URL:    "/api/user/urls",
+				Body: strings.NewReader(
+					fmt.Sprintf(`["%s"]`, strings.Join(test.shortIDs, `", "`)),
+				),
+			},
+				withContentType("application/json"),
+				withCookies([]*http.Cookie{
+					{
+						Name:  "visitor",
+						Value: jwtTokenString,
+					},
+				}),
+			)
+			defer func() {
+				if err := res.Body.Close(); err != nil {
+					s.T().Fatal(err)
+				}
+			}()
+			s.Equalf(test.wantStatus, res.StatusCode,
+				"%s wrong status code, want %d, got %d", test.name, test.wantStatus, res.StatusCode)
 		})
 	}
 }
@@ -354,22 +499,53 @@ func (s *ShortURLControllerSuite) Test_validateURL() {
 }
 
 type requestFields struct {
-	Method      string
-	URL         string
-	Body        io.Reader
-	ContentType string
-	Gzipped     bool
+	Method string
+	URL    string
+	Body   io.Reader
+}
+
+type requestOptions struct {
+	contentType string
+	gziped      bool
+	cookies     []*http.Cookie
+}
+
+func withContentType(ct string) func(*requestOptions) {
+	return func(fn *requestOptions) {
+		fn.contentType = ct
+	}
+}
+
+func withGzip(b bool) func(*requestOptions) {
+	return func(fn *requestOptions) {
+		fn.gziped = b
+	}
+}
+
+func withCookies(c []*http.Cookie) func(*requestOptions) {
+	return func(fn *requestOptions) {
+		fn.cookies = c
+	}
 }
 
 // makeRequest вспомогательная функция создающая тестовый http запрос.
-func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Response {
+func (s *ShortURLControllerSuite) makeRequest(fields requestFields, opts ...func(*requestOptions)) *http.Response {
+	options := requestOptions{
+		contentType: "text/plain",
+		gziped:      false,
+		cookies:     nil,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	var body io.Reader
 	if fields.Body != nil {
 		body = fields.Body
 	}
 
 	// Добавляем gzip сжатие тела запроса, если надо.
-	if fields.Gzipped && fields.Body != nil {
+	if options.gziped && fields.Body != nil {
 		var gzipBuffer bytes.Buffer
 		gzipW, gzErr := gzip.NewWriterLevel(&gzipBuffer, gzip.BestSpeed)
 		if gzErr != nil {
@@ -389,12 +565,18 @@ func (s *ShortURLControllerSuite) makeRequest(fields requestFields) *http.Respon
 	}
 
 	request := httptest.NewRequest(fields.Method, fields.URL, body)
-	if fields.ContentType != "" {
-		request.Header.Set("Content-Type", fields.ContentType)
+	if options.contentType != "" {
+		request.Header.Set("Content-Type", options.contentType)
 	}
-	if fields.Gzipped {
+	if options.gziped {
 		request.Header.Set("Content-Encoding", "gzip")
 		request.Header.Set("Accept-Encoding", "gzip")
+	}
+
+	if options.cookies != nil {
+		for _, cookie := range options.cookies {
+			request.AddCookie(cookie)
+		}
 	}
 
 	recorder := httptest.NewRecorder()

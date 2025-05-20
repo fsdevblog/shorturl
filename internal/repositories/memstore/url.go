@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sync"
+	"time"
 
 	"github.com/fsdevblog/shorturl/internal/db"
 	"github.com/fsdevblog/shorturl/internal/db/memory"
@@ -12,7 +15,8 @@ import (
 )
 
 type URLRepo struct {
-	s *db.MemoryStorage
+	s  *db.MemoryStorage
+	mu sync.Mutex
 }
 
 func NewURLRepo(store *db.MemoryStorage) *URLRepo {
@@ -117,4 +121,32 @@ func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 		)
 	}
 	return urls, nil
+}
+
+func (u *URLRepo) DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) (err error) { //nolint:nonamedreturns,lll
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	data, err := memory.FilterAll[models.URL](ctx, u.s.MStorage, func(val models.URL) bool {
+		if val.VisitorUUID == nil {
+			return false
+		}
+		return *val.VisitorUUID == visitorUUID && slices.Contains(shortIDs, val.ShortIdentifier)
+	})
+	if err != nil {
+		return convertErrorType(err)
+	}
+	now := time.Now().UTC()
+	var batchMap = make(map[string]*models.URL, len(data))
+	for i := range data {
+		data[i].DeletedAt = &now
+		batchMap[data[i].ShortIdentifier] = &data[i]
+	}
+	res := memory.BatchSet[models.URL](ctx, batchMap, u.s.MStorage, memory.WithOverwrite())
+	for _, re := range res {
+		if re.Err != nil {
+			err = errors.Join(err, convertErrorType(re.Err))
+		}
+	}
+	return err
 }

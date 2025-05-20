@@ -59,9 +59,19 @@ func Get[T any](ctx context.Context, key string, m *MStorage) (*T, error) {
 		}
 		var result T
 		if err := json.Unmarshal(val, &result); err != nil {
-			return nil, fmt.Errorf("unmarshal by key %s: %w", key, err)
+			return nil, fmt.Errorf("unmarshal by Key %s: %w", key, err)
 		}
 		return &result, nil
+	}
+}
+
+type SetOptions struct {
+	Overwrite bool
+}
+
+func WithOverwrite() func(*SetOptions) {
+	return func(o *SetOptions) {
+		o.Overwrite = true
 	}
 }
 
@@ -70,26 +80,31 @@ type BatchResult struct {
 	Err error
 }
 
-func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage) []BatchResult {
+func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage, opts ...func(*SetOptions)) []BatchResult {
 	var br = make([]BatchResult, len(values))
 	i := 0
 	for key, val := range values {
-		err := Set(ctx, key, val, m)
+		err := Set(ctx, key, val, m, opts...)
 		br[i] = BatchResult{Key: key, Err: err}
 		i++
 	}
 	return br
 }
 
-// Set сохраняет новые пары ключ/значение. Ключ обязан быть уникальным, иначе вернется ошибка ErrDuplicateKey.
-func Set[T any](ctx context.Context, key string, val *T, m *MStorage) error {
+// то при попытке добавить уже существующий ключ будет возвращена ошибка ErrDuplicateKey.
+func Set[T any](ctx context.Context, key string, val *T, m *MStorage, opts ...func(*SetOptions)) error {
+	options := &SetOptions{Overwrite: false}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err() //nolint:wrapcheck
 	default:
 		if exists, err := m.IsExist(ctx, key); err != nil {
 			return err
-		} else if exists {
+		} else if exists && !options.Overwrite {
 			return ErrDuplicateKey
 		}
 

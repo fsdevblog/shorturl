@@ -2,7 +2,9 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/fsdevblog/shorturl/internal/repositories"
 	"github.com/jackc/pgx/v5"
@@ -89,13 +91,13 @@ func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (*models.URL
 }
 
 const getByShortIdentifierQuery = `-- getByShortIdentifier
-SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE short_identifier = $1;
+SELECT id, short_identifier, url, visitor_uuid, deleted_at FROM urls WHERE short_identifier = $1;
 `
 
 func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
 	row := u.conn.QueryRow(ctx, getByShortIdentifierQuery, shortID)
 	var m models.URL
-	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID)
+	scanErr := row.Scan(&m.ID, &m.ShortIdentifier, &m.URL, &m.VisitorUUID, &m.DeletedAt)
 	if scanErr != nil {
 		return nil, convertErrType(scanErr)
 	}
@@ -160,4 +162,100 @@ func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 		return nil, convertErrType(err)
 	}
 	return urls, nil
+}
+
+const markAsDeletedByShortIDVisitorUUIDQuery = `-- markAsDeletedByShortIDVisitorUUID
+UPDATE urls SET deleted_at = NOW() WHERE short_identifier = $1 AND visitor_uuid = $2;
+`
+
+// DeleteByShortIDsVisitorUUID помечает записи как удаленные, выставляя флаг deleted_at в текущее время.
+func (u *URLRepo) DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) (err error) {
+	tx, txErr := u.conn.Begin(ctx)
+	if txErr != nil {
+		return convertErrType(txErr)
+	}
+
+	defer func() {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				err = convertErrType(rollbackErr)
+			}
+		}
+	}()
+
+	batchFlatInCh := make(chan error, len(shortIDs))
+
+	const batchSize = 100
+
+	lenShortIDs := len(shortIDs)
+	wg := new(sync.WaitGroup)
+
+	// разделяем запросы на батчи
+	for i := 0; i < lenShortIDs; i += batchSize {
+		end := i + batchSize
+		if end > lenShortIDs {
+			end = lenShortIDs
+		}
+		wg.Add(1)
+		go markAsDeletedBatchFn(ctx, markAsDeletedBatchFnArgs{
+			ids:         shortIDs[i:end],
+			visitorUUID: visitorUUID,
+			flatInCh:    batchFlatInCh,
+			wg:          wg,
+			tx:          tx,
+		})
+	}
+	wg.Wait()
+
+	close(batchFlatInCh)
+
+	for batchErr := range batchFlatInCh {
+		if batchErr != nil {
+			if err != nil {
+				err = errors.Join(err, convertErrType(batchErr))
+			} else {
+				err = convertErrType(batchErr)
+			}
+			return err
+		}
+	}
+
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		return convertErrType(fmt.Errorf("commit error: %w", commitErr))
+	}
+
+	return err
+}
+
+type markAsDeletedBatchFnArgs struct {
+	ids         []string
+	visitorUUID string
+	flatInCh    chan error
+	wg          *sync.WaitGroup
+	tx          pgx.Tx
+}
+
+func markAsDeletedBatchFn(ctx context.Context, args markAsDeletedBatchFnArgs) {
+	defer args.wg.Done()
+
+	batch := new(pgx.Batch)
+	for _, shortID := range args.ids {
+		batch.Queue(markAsDeletedByShortIDVisitorUUIDQuery, shortID, args.visitorUUID)
+	}
+
+	bResults := args.tx.SendBatch(ctx, batch)
+
+	for range args.ids {
+		_, execErr := bResults.Exec()
+		if execErr != nil {
+			args.flatInCh <- convertErrType(execErr)
+			return
+		}
+	}
+
+	if closeErr := bResults.Close(); closeErr != nil {
+		args.flatInCh <- convertErrType(closeErr)
+		return
+	}
+	args.flatInCh <- nil
 }

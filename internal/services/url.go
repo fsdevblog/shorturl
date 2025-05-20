@@ -29,6 +29,8 @@ type URLRepository interface {
 	GetAll(ctx context.Context) ([]models.URL, error)
 	// GetAllByVisitorUUID возвращает записи связанные с visitorUUID.
 	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
+	// DeleteByShortIDsVisitorUUID помечает записи как удаленные.
+	DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) error
 }
 
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
@@ -186,6 +188,13 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 		if batchErr != nil {
 			return fmt.Errorf("batch create: %w", batchErr)
 		}
+	}
+	return nil
+}
+
+func (u *URLService) MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error {
+	if err := u.urlRepo.DeleteByShortIDsVisitorUUID(ctx, visitorUUID, shortIDs); err != nil {
+		return fmt.Errorf("delete by short ids %+v, visitor uuid: %s: %w", shortIDs, visitorUUID, err)
 	}
 	return nil
 }

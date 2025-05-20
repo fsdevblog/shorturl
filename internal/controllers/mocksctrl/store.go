@@ -148,3 +148,17 @@ func (mr *MockShortURLStoreMockRecorder) GetByURL(ctx, rawURL interface{}) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByURL", reflect.TypeOf((*MockShortURLStore)(nil).GetByURL), ctx, rawURL)
 }
+
+// MarkAsDeleted mocks base method.
+func (m *MockShortURLStore) MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkAsDeleted", ctx, shortIDs, visitorUUID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkAsDeleted indicates an expected call of MarkAsDeleted.
+func (mr *MockShortURLStoreMockRecorder) MarkAsDeleted(ctx, shortIDs, visitorUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsDeleted", reflect.TypeOf((*MockShortURLStore)(nil).MarkAsDeleted), ctx, shortIDs, visitorUUID)
+}

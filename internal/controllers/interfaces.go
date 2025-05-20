@@ -20,4 +20,5 @@ type ShortURLStore interface {
 	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
 	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
 	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
+	MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error
 }

@@ -178,6 +178,10 @@ func (s *ShortURLController) Redirect(c *gin.Context) {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
+	if sURL.DeletedAt != nil {
+		c.AbortWithStatus(http.StatusGone)
+		return
+	}
 
 	c.Redirect(http.StatusTemporaryRedirect, sURL.URL)
 }
@@ -226,6 +230,33 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	} else {
 		c.String(statusCode, s.getShortURL(c.Request, sURL.ShortIdentifier))
 	}
+}
+
+// DeleteUserURLs DELETE /api/user/urls.
+func (s *ShortURLController) DeleteUserURLs(c *gin.Context) {
+	var ids []string
+	if bindErr := c.ShouldBindJSON(&ids); bindErr != nil || len(ids) == 0 {
+		_ = c.Error(fmt.Errorf("bind params: %w", bindErr))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request. Only json is supported"})
+		return
+	}
+
+	vu, _ := c.Get(middlewares.VisitorUUIDKey)
+	visitorUUID, ok := vu.(string)
+	if !ok {
+		_ = c.Error(errors.New("visitor cookie not found"))
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c, DefaultRequestTimeout)
+	defer cancel()
+	if err := s.urlService.MarkAsDeleted(ctx, ids, visitorUUID); err != nil {
+		_ = c.Error(fmt.Errorf("delete user urls: %w", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrInternal.Error()})
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 // bindCreateParams байндит json или application/x-www-form-urlencoded запросы для создания ссылки.

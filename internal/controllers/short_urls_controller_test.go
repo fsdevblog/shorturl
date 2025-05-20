@@ -339,6 +339,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 	validShortID := "12345678"
 	notExistShortID := "12345671"
 	inValidShortID := "123"
+	deletedSID := "deleted1"
 
 	redirectTo := "https://test.com/test/123"
 
@@ -351,6 +352,14 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		GetByShortIdentifier(gomock.Any(), notExistShortID).
 		Return(nil, services.ErrRecordNotFound).
 		Times(1)
+	now := time.Now()
+	s.mockShortURLStore.EXPECT().
+		GetByShortIdentifier(gomock.Any(), deletedSID).
+		Return(&models.URL{
+			DeletedAt:       &now,
+			URL:             gofakeit.URL(),
+			ShortIdentifier: deletedSID,
+		}, nil)
 
 	tests := []struct {
 		name       string
@@ -361,6 +370,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 		{name: "invalid", requestURI: inValidShortID, wantStatus: http.StatusNotFound},
 		{name: "notExistShortID", requestURI: notExistShortID, wantStatus: http.StatusNotFound},
 		{name: "root page", requestURI: "", wantStatus: http.StatusNotFound},
+		{name: "deleted", requestURI: deletedSID, wantStatus: http.StatusGone},
 	}
 
 	for _, tt := range tests {
@@ -383,6 +393,71 @@ func (s *ShortURLControllerSuite) TestShortURLController_Redirect() {
 			} else {
 				s.Empty(res.Header.Get("Location"))
 			}
+		})
+	}
+}
+
+func (s *ShortURLControllerSuite) TestShortURLController_DeleteUserURLs() {
+	size := 100
+	visitorUUID := gofakeit.UUID()
+	jwtTokenString, jwtTokenErr := tokens.GenerateVisitorJWT(visitorUUID, time.Hour,
+		[]byte(s.config.VisitorJWTSecret))
+
+	s.Require().NoError(jwtTokenErr)
+	var validShortIDs = make([]string, 0, size)
+	for range size {
+		gen, genErr := gofakeit.Generate("????????")
+		if genErr != nil {
+			s.Require().NoError(genErr)
+		}
+		validShortIDs = append(validShortIDs, gen)
+	}
+	withUnexistShortID := append(validShortIDs, "un_exist") //nolint:gocritic
+
+	// в обоих случаях должен вернуться статус 202, независимо от того существуют записи или нет.
+	var tests = []struct {
+		name       string
+		wantStatus int
+		shortIDs   []string
+	}{
+		{
+			name:       "exist ids",
+			wantStatus: http.StatusAccepted,
+			shortIDs:   validShortIDs,
+		}, {
+			name:       "not exist ids",
+			wantStatus: http.StatusAccepted,
+			shortIDs:   withUnexistShortID,
+		},
+	}
+
+	s.mockShortURLStore.EXPECT().MarkAsDeleted(gomock.Any(), validShortIDs, visitorUUID).Return(nil)
+	s.mockShortURLStore.EXPECT().MarkAsDeleted(gomock.Any(), withUnexistShortID, visitorUUID).Return(nil)
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			res := s.makeRequest(requestFields{
+				Method: http.MethodDelete,
+				URL:    "/api/user/urls",
+				Body: strings.NewReader(
+					fmt.Sprintf(`["%s"]`, strings.Join(test.shortIDs, `", "`)),
+				),
+			},
+				withContentType("application/json"),
+				withCookies([]*http.Cookie{
+					{
+						Name:  "visitor",
+						Value: jwtTokenString,
+					},
+				}),
+			)
+			defer func() {
+				if err := res.Body.Close(); err != nil {
+					s.T().Fatal(err)
+				}
+			}()
+			s.Equalf(test.wantStatus, res.StatusCode,
+				"%s wrong status code, want %d, got %d", test.name, test.wantStatus, res.StatusCode)
 		})
 	}
 }

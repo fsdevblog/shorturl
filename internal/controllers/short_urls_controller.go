@@ -81,9 +81,10 @@ func (s *ShortURLController) UserURLs(c *gin.Context) {
 
 func (s *ShortURLController) BatchCreate(c *gin.Context) {
 	vu, _ := c.Get(middlewares.VisitorUUIDKey)
-	visitorUUID, vOK := vu.(*string)
+	visitorUUID, vOK := vu.(string)
 	if !vOK {
-		visitorUUID = nil
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
 
 	var params []BatchCreateParams
@@ -195,8 +196,7 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	vu, _ := c.Get(middlewares.VisitorUUIDKey)
 	visitorUUID, ok := vu.(string)
 	if !ok {
-		_ = c.Error(errors.New("visitor cookie not found"))
-		c.AbortWithStatus(http.StatusForbidden)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
@@ -213,7 +213,7 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 		return
 	}
 
-	sURL, isNewRecord, createErr := s.urlService.Create(c, &visitorUUID, parsedURL.String())
+	sURL, isNewRecord, createErr := s.urlService.Create(c, visitorUUID, parsedURL.String())
 	if createErr != nil {
 		_ = c.Error(createErr)
 		c.String(http.StatusInternalServerError, createErr.Error())

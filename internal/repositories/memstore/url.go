@@ -81,10 +81,10 @@ func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*mo
 
 func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
 	data, err := memory.FilterAll[models.URL](ctx, u.s.MStorage, func(val models.URL) bool {
-		if val.VisitorUUID == nil {
+		if val.VisitorUUID == "" {
 			return false
 		}
-		return *val.VisitorUUID == visitorUUID
+		return val.VisitorUUID == visitorUUID
 	})
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -128,10 +128,10 @@ func (u *URLRepo) DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID s
 	defer u.mu.Unlock()
 
 	data, err := memory.FilterAll[models.URL](ctx, u.s.MStorage, func(val models.URL) bool {
-		if val.VisitorUUID == nil {
+		if val.VisitorUUID == "" {
 			return false
 		}
-		return *val.VisitorUUID == visitorUUID && slices.Contains(shortIDs, val.ShortIdentifier)
+		return val.VisitorUUID == visitorUUID && slices.Contains(shortIDs, val.ShortIdentifier)
 	})
 	if err != nil {
 		return convertErrorType(err)

@@ -114,6 +114,7 @@ func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) (
 		return nil, convertErrType(qErr)
 	}
 	defer rows.Close()
+
 	var urls []models.URL
 	for rows.Next() {
 		var m models.URL
@@ -121,6 +122,10 @@ func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) (
 			return nil, convertErrType(err)
 		}
 		urls = append(urls, m)
+	}
+
+	if rErr := rows.Err(); rErr != nil {
+		return nil, convertErrType(rErr)
 	}
 
 	return urls, nil

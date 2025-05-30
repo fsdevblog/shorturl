@@ -11,5 +11,5 @@ type URL struct {
 	DeletedAt       *time.Time `json:"deletedAt"`
 	URL             string     `json:"url"`
 	ShortIdentifier string     `json:"shortIdentifier"`
-	VisitorUUID     *string    `json:"visitorUUID"`
+	VisitorUUID     string     `json:"visitorUUID"`
 }

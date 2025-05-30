@@ -1,9 +1,7 @@
 package middlewares
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/fsdevblog/shorturl/internal/tokens"
@@ -19,14 +17,7 @@ const (
 
 func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		visitorAuthCookie, err := c.Request.Cookie(VisitorCookieName)
-
-		if err != nil && !errors.Is(err, http.ErrNoCookie) {
-			// куки не работают. Нам тут делать нечего, отправляем ошибку выше и едем дальше.
-			_ = c.Error(fmt.Errorf("visitor cookie middleware: %w", err))
-			c.Next()
-			return
-		}
+		visitorAuthCookie, _ := c.Request.Cookie(VisitorCookieName)
 
 		var visitorUUID string
 		needGenerateJWT := true
@@ -36,7 +27,7 @@ func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 			token, validateErr := tokens.ValidateVisitorJWT(visitorAuthCookie.Value, jwtSecret)
 			if validateErr != nil {
 				// отправляем ошибку и будем выставлять новый токен.
-				_ = c.Error(fmt.Errorf("visitor cookie middleware: %w", validateErr))
+				_ = c.Error(fmt.Errorf("visitor cookie middleware: %s", validateErr.Error()))
 			} else if token.Valid {
 				needGenerateJWT = false
 
@@ -49,13 +40,13 @@ func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 			var uErr error
 			visitorUUID, uErr = generateUUID()
 			if uErr != nil {
-				_ = c.Error(fmt.Errorf("visitor cookie middleware: %w", uErr))
+				_ = c.Error(fmt.Errorf("visitor cookie middleware: %s", uErr.Error()))
 				c.Next()
 				return
 			}
 			tokenString, tokenErr := tokens.GenerateVisitorJWT(visitorUUID, VisitorJWTExpireDuration, jwtSecret)
 			if tokenErr != nil {
-				_ = c.Error(fmt.Errorf("visitor cookie middleware: %w", tokenErr))
+				_ = c.Error(fmt.Errorf("visitor cookie middleware: %s", tokenErr.Error()))
 				c.Next()
 				return
 			}
@@ -79,7 +70,7 @@ func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 func generateUUID() (string, error) {
 	u, err := uuid.NewRandom()
 	if err != nil {
-		return "", fmt.Errorf("generate uuid error: %w", err)
+		return "", fmt.Errorf("generate uuid error: %s", err.Error())
 	}
 	return u.String(), nil
 }

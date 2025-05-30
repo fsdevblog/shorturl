@@ -65,14 +65,14 @@ func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (
 // BatchCreate Создает урлы пачками.
 func (u *URLService) BatchCreate(
 	ctx context.Context,
-	visitorUUID *string,
+	visitorUUID string,
 	rawURLs []string,
 ) (*BatchCreateShortURLsResponse, error) {
 	var args = make([]repositories.BatchCreateArg, len(rawURLs))
 	for i, rawURL := range rawURLs {
 		arg := repositories.BatchCreateArg{
 			URL:             rawURL,
-			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
+			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength, visitorUUID),
 			VisitorUUID:     visitorUUID,
 		}
 		args[i] = arg
@@ -107,10 +107,10 @@ func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, 
 	return res, nil
 }
 
-func (u *URLService) Create(ctx context.Context, visitorUUID *string, rawURL string) (*models.URL, bool, error) {
+func (u *URLService) Create(ctx context.Context, visitorUUID string, rawURL string) (*models.URL, bool, error) {
 	var sURL = models.URL{
 		URL:             rawURL,
-		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
+		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength, visitorUUID),
 		VisitorUUID:     visitorUUID,
 	}
 	m, isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
@@ -199,10 +199,11 @@ func (u *URLService) MarkAsDeleted(ctx context.Context, shortIDs []string, visit
 	return nil
 }
 
-// generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.
-func generateShortID(rawURL string, length int) string {
+// generateShortID генерирует идентификатор для ссылки нужной длины на основе visitorUUID.
+func generateShortID(rawURL string, length int, visitorUUID string) string {
 	// Добавляем счетчик к срезу (для избежания коллизий)
 	b := []byte(rawURL)
+	b = append(b, []byte(visitorUUID)...)
 
 	// Создаем хеш и конвертим в base62
 	hash := md5.Sum(b) //nolint:gosec

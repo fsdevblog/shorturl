@@ -74,7 +74,7 @@ func (m *MockShortURLStore) EXPECT() *MockShortURLStoreMockRecorder {
 }
 
 // BatchCreate mocks base method.
-func (m *MockShortURLStore) BatchCreate(ctx context.Context, visitorUUID *string, rawURLs []string) (*services.BatchCreateShortURLsResponse, error) {
+func (m *MockShortURLStore) BatchCreate(ctx context.Context, visitorUUID string, rawURLs []string) (*services.BatchCreateShortURLsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchCreate", ctx, visitorUUID, rawURLs)
 	ret0, _ := ret[0].(*services.BatchCreateShortURLsResponse)
@@ -89,7 +89,7 @@ func (mr *MockShortURLStoreMockRecorder) BatchCreate(ctx, visitorUUID, rawURLs i
 }
 
 // Create mocks base method.
-func (m *MockShortURLStore) Create(ctx context.Context, visitorUUID *string, rawURL string) (*models.URL, bool, error) {
+func (m *MockShortURLStore) Create(ctx context.Context, visitorUUID, rawURL string) (*models.URL, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, visitorUUID, rawURL)
 	ret0, _ := ret[0].(*models.URL)

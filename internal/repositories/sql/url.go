@@ -27,7 +27,7 @@ const batchCreateURLQuery = `-- batchCreateURLs
 INSERT INTO urls 
 	(short_identifier, url, visitor_uuid) 
 VALUES ($1, $2, $3)
-ON CONFLICT (url) 
+ON CONFLICT (url, visitor_uuid) 
 	DO UPDATE SET updated_at = NOW()
 RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `
@@ -73,7 +73,7 @@ func (u *URLRepo) BatchCreate(
 const createURLQuery = `-- createURL
 INSERT INTO urls (short_identifier, url, visitor_uuid) 
 	VALUES ($1, $2, $3) 
-ON CONFLICT (url) 
+ON CONFLICT (url, visitor_uuid) 
 	DO UPDATE SET updated_at = NOW()
 RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `

@@ -18,6 +18,9 @@ DATABASE_DSN=postgres://study1-user:123123123@localhost:5435/postgres?sslmode=di
 # Переменная для номера теста
 ITER?=1
 
+# Переменная для имени миграции
+MN?=new
+
 dev-db-up:
 	docker compose up -d postgres
 
@@ -56,9 +59,14 @@ auto-test: build
 test:
 	go test ./... -v
 
+# Создать миграцию
+migrate-create:
+	migrate create -ext sql -dir internal/db/migrations -seq ${MN}
+
 # Миграция вверх
 migrate-up:
 	migrate -database "postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable" -path ./internal/db/migrations up 1
 
+# Миграция вниз
 migrate-down:
 	migrate -database "postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable" -path ./internal/db/migrations down 1

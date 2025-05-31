@@ -21,7 +21,7 @@ func SetupRouter(params RouterParams) *gin.Engine {
 	if params.Logger != nil {
 		r.Use(middlewares.LoggerMiddleware(params.Logger))
 	}
-
+	r.Use(middlewares.VisitorCookieMiddleware([]byte(params.AppConf.VisitorJWTSecret)))
 	r.Use(middlewares.GzipMiddleware())
 
 	shortURLController := NewShortURLController(params.URLService, params.AppConf.BaseURL)
@@ -35,5 +35,7 @@ func SetupRouter(params RouterParams) *gin.Engine {
 	api.POST("/shorten", shortURLController.CreateShortURL)
 	api.POST("/shorten/batch", shortURLController.BatchCreate)
 	api.GET("/:shortID", shortURLController.Redirect)
+	api.GET("/user/urls", shortURLController.UserURLs)
+	api.DELETE("/user/urls", shortURLController.DeleteUserURLs)
 	return r
 }

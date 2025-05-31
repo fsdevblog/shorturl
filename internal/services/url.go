@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
 )
@@ -25,6 +27,10 @@ type URLRepository interface {
 	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
 	// GetAll возвращает все записи в бд. Сразу пачкой.
 	GetAll(ctx context.Context) ([]models.URL, error)
+	// GetAllByVisitorUUID возвращает записи связанные с visitorUUID.
+	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
+	// DeleteByShortIDsVisitorUUID помечает записи как удаленные.
+	DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) error
 }
 
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
@@ -34,6 +40,15 @@ type URLService struct {
 
 func NewURLService(urlRepo URLRepository) *URLService {
 	return &URLService{urlRepo: urlRepo}
+}
+
+func (u *URLService) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
+	urls, err := u.urlRepo.GetAllByVisitorUUID(ctx, visitorUUID)
+	if err != nil {
+		return nil, fmt.Errorf("get by visitor uuid: %w", err)
+	}
+	logrus.Infof("Get all urls by visitor uuid: %s: %+v", visitorUUID, urls)
+	return urls, nil
 }
 
 func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
@@ -48,16 +63,17 @@ func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (
 }
 
 // BatchCreate Создает урлы пачками.
-func (u *URLService) BatchCreate(ctx context.Context, rawURLs []string) (*BatchCreateShortURLsResponse, error) {
-	// я проигнорирую здесь вопрос с коллизиями. В батч вставке обработка коллизий - это сущий кошмар который
-	// врядли входит в рамки курса, а у меня мозг плавится, не успеваю к дедлайну по сдаче ревью)
-	// из метода Create её также убрал.
-
+func (u *URLService) BatchCreate(
+	ctx context.Context,
+	visitorUUID string,
+	rawURLs []string,
+) (*BatchCreateShortURLsResponse, error) {
 	var args = make([]repositories.BatchCreateArg, len(rawURLs))
 	for i, rawURL := range rawURLs {
 		arg := repositories.BatchCreateArg{
 			URL:             rawURL,
-			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
+			ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength, visitorUUID),
+			VisitorUUID:     visitorUUID,
 		}
 		args[i] = arg
 	}
@@ -91,10 +107,11 @@ func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, 
 	return res, nil
 }
 
-func (u *URLService) Create(ctx context.Context, rawURL string) (*models.URL, bool, error) {
+func (u *URLService) Create(ctx context.Context, visitorUUID string, rawURL string) (*models.URL, bool, error) {
 	var sURL = models.URL{
 		URL:             rawURL,
-		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength),
+		ShortIdentifier: generateShortID(rawURL, models.ShortIdentifierLength, visitorUUID),
+		VisitorUUID:     visitorUUID,
 	}
 	m, isUniq, createErr := u.urlRepo.Create(ctx, &sURL)
 	if createErr != nil {
@@ -175,10 +192,18 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 	return nil
 }
 
-// generateShortID генерирует идентификатор для ссылки нужной длины на основе delta.
-func generateShortID(rawURL string, length int) string {
+func (u *URLService) MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error {
+	if err := u.urlRepo.DeleteByShortIDsVisitorUUID(ctx, visitorUUID, shortIDs); err != nil {
+		return fmt.Errorf("delete by short ids %+v, visitor uuid: %s: %w", shortIDs, visitorUUID, err)
+	}
+	return nil
+}
+
+// generateShortID генерирует идентификатор для ссылки нужной длины на основе visitorUUID.
+func generateShortID(rawURL string, length int, visitorUUID string) string {
 	// Добавляем счетчик к срезу (для избежания коллизий)
 	b := []byte(rawURL)
+	b = append(b, []byte(visitorUUID)...)
 
 	// Создаем хеш и конвертим в base62
 	hash := md5.Sum(b) //nolint:gosec

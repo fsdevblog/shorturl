@@ -28,7 +28,7 @@ func NewURLRepo(store *db.MemoryStorage) *URLRepo {
 func (u *URLRepo) BatchCreate(
 	ctx context.Context,
 	mURLs []repositories.BatchCreateArg,
-) ([]repositories.BatchResult[models.URL], error) {
+) (*repositories.BatchCreateShortURLsResult, error) {
 	var collection = make(map[string]*models.URL, len(mURLs))
 	for _, m := range mURLs {
 		collection[m.ShortIdentifier] = &models.URL{
@@ -51,7 +51,9 @@ func (u *URLRepo) BatchCreate(
 		}
 	}
 
-	return result, nil
+	return &repositories.BatchCreateShortURLsResult{
+		Results: result,
+	}, nil
 }
 
 func (u *URLRepo) Create(ctx context.Context, sURL *models.URL) (*models.URL, bool, error) {

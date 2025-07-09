@@ -16,23 +16,6 @@ import (
 	"github.com/fsdevblog/shorturl/internal/repositories"
 )
 
-type URLRepository interface {
-	BatchCreate(ctx context.Context, mURLs []repositories.BatchCreateArg) ([]repositories.BatchResult[models.URL], error)
-	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
-	// Возвращает два значения: bool отвечает за уникальность созданной записи, 2 ошибку.
-	Create(ctx context.Context, mURL *models.URL) (*models.URL, bool, error)
-	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
-	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
-	// GetByURL находит запись в хранилище по заданной ссылке
-	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
-	// GetAll возвращает все записи в бд. Сразу пачкой.
-	GetAll(ctx context.Context) ([]models.URL, error)
-	// GetAllByVisitorUUID возвращает записи связанные с visitorUUID.
-	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
-	// DeleteByShortIDsVisitorUUID помечает записи как удаленные.
-	DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) error
-}
-
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
 type URLService struct {
 	urlRepo URLRepository
@@ -82,9 +65,9 @@ func (u *URLService) BatchCreate(
 	if batchErr != nil {
 		return nil, fmt.Errorf("%w: batch create: %s", ErrUnknown, batchErr.Error())
 	}
-	batchResponse := NewBatchExecResponse[models.URL](len(batchResults))
+	batchResponse := NewBatchExecResponse[models.URL](len(batchResults.Results))
 
-	for i, result := range batchResults {
+	for i, result := range batchResults.Results {
 		batchResponse.results[i].Item = result.Value
 		var err = result.Err
 		if result.Err != nil && errors.Is(result.Err, repositories.ErrDuplicateKey) {

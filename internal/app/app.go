@@ -86,6 +86,7 @@ func (a *App) Run() error {
 	select {
 	case <-ctx.Done():
 		a.Logger.Info("Shutdown command received")
+		serverErr = ctx.Err()
 	case serverErr = <-errChan:
 		a.Logger.WithError(serverErr).Error("router error")
 	}

@@ -3,6 +3,7 @@ package controllers
 import (
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/controllers/middlewares"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -21,6 +22,10 @@ func SetupRouter(params RouterParams) *gin.Engine {
 	if params.Logger != nil {
 		r.Use(middlewares.LoggerMiddleware(params.Logger))
 	}
+
+	// подключаем pprof. Т.к. задачи защищать роут в продакшн окружении не стоит, не делаем этого.
+	pprof.Register(r)
+
 	r.Use(middlewares.VisitorCookieMiddleware([]byte(params.AppConf.VisitorJWTSecret)))
 	r.Use(middlewares.GzipMiddleware())
 

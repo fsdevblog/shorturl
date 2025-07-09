@@ -35,7 +35,7 @@ RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax 
 func (u *URLRepo) BatchCreate(
 	ctx context.Context,
 	args []repositories.BatchCreateArg,
-) ([]repositories.BatchResult[models.URL], error) {
+) (*repositories.BatchCreateShortURLsResult, error) {
 	batch := new(pgx.Batch)
 
 	for _, arg := range args {
@@ -67,7 +67,7 @@ func (u *URLRepo) BatchCreate(
 	if err := bResults.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close batch: %w", err)
 	}
-	return ret, nil
+	return &repositories.BatchCreateShortURLsResult{Results: ret}, nil
 }
 
 const createURLQuery = `-- createURL

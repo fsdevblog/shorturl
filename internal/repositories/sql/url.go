@@ -13,10 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// URLRepo представляет собой репозиторий для работы с URL в PostgreSQL.
 type URLRepo struct {
 	conn *pgxpool.Pool
 }
 
+// NewURLRepo создает новый экземпляр репозитория URL.
+//
+// Параметры:
+//   - conn: пул подключений к PostgreSQL
+//
+// Возвращает:
+//   - *URLRepo: инициализированный репозиторий
 func NewURLRepo(conn *pgxpool.Pool) *URLRepo {
 	return &URLRepo{
 		conn: conn,
@@ -32,6 +40,15 @@ ON CONFLICT (url, visitor_uuid)
 RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `
 
+// BatchCreate создает несколько URL записей одновременно.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - args: слайс с данными для создания URL
+//
+// Возвращает:
+//   - *repositories.BatchCreateShortURLsResult: результат создания записей
+//   - error: ошибка выполнения операции (преобразованная через convertErrType)
 func (u *URLRepo) BatchCreate(
 	ctx context.Context,
 	args []repositories.BatchCreateArg,
@@ -78,6 +95,16 @@ ON CONFLICT (url, visitor_uuid)
 RETURNING id, created_at, updated_at, short_identifier, url, visitor_uuid, xmax = 0 AS inserted;
 `
 
+// Create создает новую URL запись.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - modelURL: данные URL для создания
+//
+// Возвращает:
+//   - *models.URL: созданная запись
+//   - bool: флаг успешного создания (true если создана новая запись, false если обновлена существующая)
+//   - error: ошибка создания (преобразованная через convertErrType)
 func (u *URLRepo) Create(ctx context.Context, modelURL *models.URL) (*models.URL, bool, error) {
 	row := u.conn.QueryRow(ctx, createURLQuery, modelURL.ShortIdentifier, modelURL.URL, modelURL.VisitorUUID)
 
@@ -94,6 +121,15 @@ const getByShortIdentifierQuery = `-- getByShortIdentifier
 SELECT id, short_identifier, url, visitor_uuid, deleted_at FROM urls WHERE short_identifier = $1;
 `
 
+// GetByShortIdentifier получает URL по короткому идентификатору.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - shortID: короткий идентификатор URL
+//
+// Возвращает:
+//   - *models.URL: найденная запись
+//   - error: ошибка поиска (преобразованная через convertErrType)
 func (u *URLRepo) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
 	row := u.conn.QueryRow(ctx, getByShortIdentifierQuery, shortID)
 	var m models.URL
@@ -108,6 +144,15 @@ const getAllByVisitorUUIDQuery = `-- getAllByVisitorUUID
 SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE visitor_uuid = $1;
 `
 
+// GetAllByVisitorUUID получает все URL для указанного посетителя.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - visitorUUID: идентификатор посетителя
+//
+// Возвращает:
+//   - []models.URL: найденные записи
+//   - error: ошибка поиска (преобразованная через convertErrType)
 func (u *URLRepo) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
 	rows, qErr := u.conn.Query(ctx, getAllByVisitorUUIDQuery, visitorUUID)
 	if qErr != nil {
@@ -135,6 +180,15 @@ const getByURLQuery = `-- getByURL
 SELECT id, short_identifier, url, visitor_uuid FROM urls WHERE url = $1;
 `
 
+// GetByURL получает запись по оригинальному URL.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - rawURL: оригинальный URL
+//
+// Возвращает:
+//   - *models.URL: найденная запись
+//   - error: ошибка поиска (преобразованная через convertErrType)
 func (u *URLRepo) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
 	row := u.conn.QueryRow(ctx, getByURLQuery, rawURL)
 	var m models.URL
@@ -149,6 +203,14 @@ const getAllURLsQuery = `-- getAllURLs
 SELECT id, short_identifier, url, visitor_uuid FROM urls;;
 `
 
+// GetAll получает все сохраненные URL записи.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//
+// Возвращает:
+//   - []models.URL: все записи
+//   - error: ошибка получения (преобразованная через convertErrType)
 func (u *URLRepo) GetAll(ctx context.Context) ([]models.URL, error) {
 	var urls []models.URL
 	rows, qErr := u.conn.Query(ctx, getAllURLsQuery)
@@ -173,7 +235,16 @@ const markAsDeletedByShortIDVisitorUUIDQuery = `-- markAsDeletedByShortIDVisitor
 UPDATE urls SET deleted_at = NOW() WHERE short_identifier = $1 AND visitor_uuid = $2;
 `
 
-// DeleteByShortIDsVisitorUUID помечает записи как удаленные, выставляя флаг deleted_at в текущее время.
+// DeleteByShortIDsVisitorUUID помечает URL записи как удаленные для указанного посетителя.
+// Операция выполняется в транзакции батчами по 100 записей.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - visitorUUID: идентификатор посетителя
+//   - shortIDs: список коротких идентификаторов для удаления
+//
+// Возвращает:
+//   - error: ошибка удаления (преобразованная через convertErrType)
 func (u *URLRepo) DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) (err error) {
 	tx, txErr := u.conn.Begin(ctx)
 	if txErr != nil {
@@ -232,6 +303,7 @@ func (u *URLRepo) DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID s
 	return err
 }
 
+// markAsDeletedBatchFnArgs содержит аргументы для функции markAsDeletedBatchFn.
 type markAsDeletedBatchFnArgs struct {
 	ids         []string
 	visitorUUID string
@@ -240,6 +312,11 @@ type markAsDeletedBatchFnArgs struct {
 	tx          pgx.Tx
 }
 
+// markAsDeletedBatchFn обрабатывает батч запросов на удаление URL.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - args: аргументы для обработки батча
 func markAsDeletedBatchFn(ctx context.Context, args markAsDeletedBatchFnArgs) {
 	defer args.wg.Done()
 

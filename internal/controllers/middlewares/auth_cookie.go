@@ -15,6 +15,25 @@ const (
 	VisitorJWTExpireDuration = 24 * time.Hour
 )
 
+// VisitorCookieMiddleware создает middleware для аутентификации посетителей через cookie.
+// Проверяет наличие и валидность JWT токена в cookie. Если токен отсутствует или невалиден,
+// генерирует новый UUID посетителя и создает новый JWT токен.
+//
+// Алгоритм работы:
+//  1. Проверяет наличие cookie с JWT токеном
+//  2. Если токен есть - проверяет его валидность
+//  3. Если токен отсутствует или невалиден - генерирует новый UUID и JWT токен
+//  4. Сохраняет UUID посетителя в контексте запроса
+//  5. При необходимости устанавливает новую cookie с JWT токеном
+//
+// Параметры:
+//   - jwtSecret: секретный ключ для подписи JWT токенов
+//
+// Возвращает:
+//   - gin.HandlerFunc: middleware функция
+//
+// Устанавливает в контексте:
+//   - VisitorUUIDKey: UUID посетителя (string)
 func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		visitorAuthCookie, _ := c.Request.Cookie(VisitorCookieName)
@@ -67,6 +86,11 @@ func VisitorCookieMiddleware(jwtSecret []byte) gin.HandlerFunc {
 	}
 }
 
+// generateUUID генерирует случайный UUID v4.
+//
+// Возвращает:
+//   - string: сгенерированный UUID в строковом представлении
+//   - error: ошибка генерации UUID
 func generateUUID() (string, error) {
 	u, err := uuid.NewRandom()
 	if err != nil {

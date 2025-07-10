@@ -12,15 +12,41 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// gzipWriter обертка над gin.ResponseWriter для сжатия ответов в формате gzip.
 type gzipWriter struct {
 	gin.ResponseWriter
 	writer *gzip.Writer
 }
 
+// Write реализует интерфейс io.Writer.
+// Записывает сжатые данные в формате gzip.
+//
+// Параметры:
+//   - data: данные для записи
+//
+// Возвращает:
+//   - int: количество записанных байт
+//   - error: ошибка записи
 func (g *gzipWriter) Write(data []byte) (int, error) {
 	return g.writer.Write(data) //nolint:wrapcheck
 }
 
+// GzipMiddleware создает middleware для автоматического сжатия ответов
+// и распаковки запросов в формате gzip.
+//
+// Для ответов:
+//   - Проверяет поддержку gzip в заголовке Accept-Encoding
+//   - При поддержке сжимает ответ и устанавливает соответствующие заголовки
+//   - Content-Encoding: gzip
+//   - Vary: Accept-Encoding
+//
+// Для запросов:
+//   - Обрабатывает только POST, PUT, PATCH запросы
+//   - Проверяет наличие заголовка Content-Encoding: gzip
+//   - При наличии распаковывает тело запроса
+//
+// Возвращает:
+//   - gin.HandlerFunc: middleware функция
 func GzipMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		readGzip(ctx)
@@ -29,6 +55,10 @@ func GzipMiddleware() gin.HandlerFunc {
 	}
 }
 
+// writeGzip настраивает сжатие ответа в формате gzip.
+//
+// Параметры:
+//   - ctx: контекст Gin
 func writeGzip(ctx *gin.Context) {
 	if !strings.Contains(ctx.Request.Header.Get("Accept-Encoding"), "gzip") {
 		ctx.Next()
@@ -54,8 +84,11 @@ func writeGzip(ctx *gin.Context) {
 	ctx.Next()
 }
 
-// readGzip Определяет сжаты ли данные gzip. Имеет смысл это делать только для POST|PUT|PATCH запросов
-// затем распаковывает gzip и подменяет тело запроса на распакованное.
+// readGzip обрабатывает сжатые запросы в формате gzip.
+// Распаковывает тело запроса если оно сжато.
+//
+// Параметры:
+//   - ctx: контекст Gin
 func readGzip(ctx *gin.Context) {
 	if slices.Contains([]string{http.MethodPost, http.MethodPut, http.MethodPatch}, ctx.Request.Method) {
 		ce := ctx.Request.Header.Get("Content-Encoding")

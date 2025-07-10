@@ -8,14 +8,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// PingController контроллер для проверки работоспособности сервиса.
 type PingController struct {
-	conn ConnectionChecker
+	conn ConnectionChecker // Проверяет соединение с базой данных
 }
 
+// NewPingController создает новый экземпляр PingController.
+//
+// Параметры:
+//   - conn: интерфейс для проверки соединения
+//
+// Возвращает:
+//   - *PingController: новый экземпляр контроллера
 func NewPingController(conn ConnectionChecker) *PingController {
 	return &PingController{conn: conn}
 }
 
+// Ping обрабатывает GET /ping запрос.
+// Проверяет работоспособность сервиса и соединение с базой данных.
+//
+// В случае успеха возвращает:
+//   - HTTP 200 OK с телом "pong"
+//
+// В случае ошибки возвращает:
+//   - HTTP 500 Internal Server Error
+//
+// Параметры:
+//   - ctx: контекст Gin
 func (c *PingController) Ping(ctx *gin.Context) {
 	pingCtx, cancel := context.WithTimeout(ctx, DefaultRequestTimeout)
 	defer cancel()

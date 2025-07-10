@@ -8,30 +8,50 @@ import (
 	"github.com/goccy/go-json"
 )
 
-// MStorage реализация хранилища в памяти.
-// Контекст ей по идее не нужен, но для того чтоб не писать доп обертку в сервисах чтоб
-// все соответствовало нужному интерфейсу, будем считать что контекст жизненно необходим
-// для предотвращения длительных блокировок и тд и тп.
+// MStorage реализует in-memory хранилище данных с потокобезопасным доступом.
 type MStorage struct {
 	data map[string][]byte
 	m    sync.RWMutex
 }
 
+// NewMemStorage создает новый экземпляр in-memory хранилища.
+//
+// Возвращает:
+//   - *MStorage: инициализированное хранилище
 func NewMemStorage() *MStorage {
 	return &MStorage{
 		data: make(map[string][]byte),
 	}
 }
 
+// Len возвращает количество элементов в хранилище.
+//
+// Возвращает:
+//   - int: количество элементов
 func (m *MStorage) Len() int {
 	return len(m.data)
 }
 
-// Ping бесполезный метод. Заглушка, всегда возвращает nil.
+// Ping проверяет доступность хранилища (заглушка для совместимости интерфейсов).
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//
+// Возвращает:
+//   - error: всегда nil
 func (m *MStorage) Ping(_ context.Context) error {
 	return nil
 }
 
+// IsExist проверяет существование ключа в хранилище.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - key: проверяемый ключ
+//
+// Возвращает:
+//   - bool: true если ключ существует
+//   - error: ошибка проверки
 func (m *MStorage) IsExist(ctx context.Context, key string) (bool, error) {
 	select {
 	case <-ctx.Done():
@@ -45,6 +65,16 @@ func (m *MStorage) IsExist(ctx context.Context, key string) (bool, error) {
 	}
 }
 
+// Get получает значение по ключу и десериализует его в указанный тип.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - key: ключ для получения значения
+//   - m: хранилище
+//
+// Возвращает:
+//   - *T: указатель на десериализованное значение
+//   - error: ошибка получения или десериализации
 func Get[T any](ctx context.Context, key string, m *MStorage) (*T, error) {
 	select {
 	case <-ctx.Done():
@@ -65,21 +95,34 @@ func Get[T any](ctx context.Context, key string, m *MStorage) (*T, error) {
 	}
 }
 
+// SetOptions опции для операции сохранения.
 type SetOptions struct {
-	Overwrite bool
+	Overwrite bool // разрешить перезапись существующего значения
 }
 
+// WithOverwrite создает опцию разрешающую перезапись существующего значения.
 func WithOverwrite() func(*SetOptions) {
 	return func(o *SetOptions) {
 		o.Overwrite = true
 	}
 }
 
+// BatchResult результат одной операции пакетного сохранения.
 type BatchResult struct {
-	Key string
-	Err error
+	Key string // Ключ
+	Err error  // Ошибка операции
 }
 
+// BatchSet выполняет пакетное сохранение значений.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - values: карта ключ-значение для сохранения
+//   - m: хранилище
+//   - opts: опции сохранения
+//
+// Возвращает:
+//   - []BatchResult: результаты операций сохранения
 func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage, opts ...func(*SetOptions)) []BatchResult {
 	var br = make([]BatchResult, len(values))
 	i := 0
@@ -91,7 +134,17 @@ func BatchSet[T any](ctx context.Context, values map[string]*T, m *MStorage, opt
 	return br
 }
 
-// то при попытке добавить уже существующий ключ будет возвращена ошибка ErrDuplicateKey.
+// Set сохраняет значение по ключу.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - key: ключ
+//   - val: сохраняемое значение
+//   - m: хранилище
+//   - opts: опции сохранения
+//
+// Возвращает:
+//   - error: ошибка сохранения
 func Set[T any](ctx context.Context, key string, val *T, m *MStorage, opts ...func(*SetOptions)) error {
 	options := &SetOptions{Overwrite: false}
 	for _, opt := range opts {
@@ -120,6 +173,16 @@ func Set[T any](ctx context.Context, key string, val *T, m *MStorage, opts ...fu
 	}
 }
 
+// FilterAll возвращает все значения, удовлетворяющие предикату.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - m: хранилище
+//   - fn: функция-предикат
+//
+// Возвращает:
+//   - []T: отфильтрованные значения
+//   - error: ошибка фильтрации
 func FilterAll[T any](ctx context.Context, m *MStorage, fn func(T) bool) ([]T, error) {
 	m.m.RLock()
 	defer m.m.RUnlock()
@@ -141,6 +204,15 @@ func FilterAll[T any](ctx context.Context, m *MStorage, fn func(T) bool) ([]T, e
 	return result, nil
 }
 
+// GetAll возвращает все значения из хранилища.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - m: хранилище
+//
+// Возвращает:
+//   - []T: все значения
+//   - error: ошибка получения
 func GetAll[T any](ctx context.Context, m *MStorage) ([]T, error) {
 	m.m.RLock()
 	defer m.m.RUnlock()

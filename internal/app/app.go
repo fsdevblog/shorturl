@@ -18,11 +18,19 @@ import (
 )
 
 type App struct {
-	config     config.Config
-	dbServices *services.Services
-	Logger     *zap.Logger
+	config     config.Config      // Конфигурация приложения
+	dbServices *services.Services // Сервисный слой для работы с БД
+	Logger     *zap.Logger        // Логгер приложения
 }
 
+// New создает новый экземпляр приложения.
+//
+// Параметры:
+//   - config: конфигурация приложения
+//
+// Возвращает:
+//   - *App: экземпляр приложения
+//   - error: ошибка инициализации
 func New(config config.Config) (*App, error) {
 	logger, errLogger := logs.New()
 	if errLogger != nil {
@@ -43,7 +51,16 @@ func New(config config.Config) (*App, error) {
 	}, nil
 }
 
-// Must вызывает панику если произошла ошибка.
+// Must обертка над конструктором, вызывающая panic при ошибке.
+//
+// Параметры:
+//   - a: экземпляр приложения
+//   - err: ошибка
+//
+// Возвращает:
+//   - *App: экземпляр приложения
+//
+// Паникует при err != nil.
 func Must(a *App, err error) *App {
 	if err != nil {
 		panic(err)
@@ -51,6 +68,11 @@ func Must(a *App, err error) *App {
 	return a
 }
 
+// restoreBackup восстанавливает данные из резервной копии (для in-memory хранилища).
+// Использует таймаут 10 секунд для операции восстановления.
+//
+// Возвращает:
+//   - error: ошибка восстановления данных из файла
 func (a *App) restoreBackup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
 	defer cancel()
@@ -61,7 +83,13 @@ func (a *App) restoreBackup() error {
 	return nil
 }
 
-// Run запускает web сервер.
+// Run запускает web сервер и обрабатывает сигналы завершения.
+// При получении сигнала SIGINT или SIGTERM выполняет корректное завершение:
+//   - Создает резервную копию данных, если используется in-memory хранилище
+//   - Завершает работу сервера
+//
+// Возвращает:
+//   - error: ошибка работы сервера
 func (a *App) Run() error {
 	if restoreErr := a.restoreBackup(); restoreErr != nil {
 		return fmt.Errorf("run app: %w", restoreErr)
@@ -114,7 +142,16 @@ func (a *App) Run() error {
 	return errServer
 }
 
-// initServices создает подключение к базе данных и возвращает сервисный слой приложения.
+// initServices инициализирует сервисный слой приложения.
+// Определяет тип хранилища (PostgreSQL или in-memory) на основе конфигурации.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - *services.Services: инициализированный сервисный слой
+//   - error: ошибка инициализации
 func initServices(ctx context.Context, appConf config.Config) (*services.Services, error) {
 	// Нужно определить тип хранилища
 
@@ -135,6 +172,13 @@ func initServices(ctx context.Context, appConf config.Config) (*services.Service
 	return dbServices, nil
 }
 
+// whatIsDBStorageType определяет тип хранилища на основе конфигурации.
+//
+// Параметры:
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - db.StorageType: тип хранилища (StorageTypePostgres или StorageTypeInMemory)
 func whatIsDBStorageType(appConf *config.Config) db.StorageType {
 	if appConf.DatabaseDSN != "" {
 		return db.StorageTypePostgres
@@ -142,6 +186,13 @@ func whatIsDBStorageType(appConf *config.Config) db.StorageType {
 	return db.StorageTypeInMemory
 }
 
+// whatIsServiceType определяет тип сервиса на основе конфигурации.
+//
+// Параметры:
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - services.ServiceType: тип сервиса (ServiceTypePostgres или ServiceTypeInMemory)
 func whatIsServiceType(appConf *config.Config) services.ServiceType {
 	if appConf.DatabaseDSN != "" {
 		return services.ServiceTypePostgres

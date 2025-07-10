@@ -8,6 +8,19 @@ import (
 	"github.com/fsdevblog/shorturl/internal/repositories"
 )
 
+// convertErrorType конвертирует специфичные ошибки хранилища в памяти
+// в общие ошибки уровня репозитория.
+//
+// Параметры:
+//   - err: исходная ошибка
+//
+// Возвращает:
+//   - error: преобразованная ошибка или nil, если входная ошибка nil
+//
+// Преобразования ошибок:
+//   - memory.ErrDuplicateKey -> repositories.ErrDuplicateKey
+//   - memory.ErrNotFound -> repositories.ErrNotFound
+//   - другие ошибки -> repositories.ErrUnknown
 func convertErrorType(err error) error {
 	if err == nil {
 		return nil

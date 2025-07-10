@@ -8,6 +8,7 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// Config содержит параметры конфигурации приложения.
 type Config struct {
 	// Путь для бекапа (актуально мемори хранилища).
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
@@ -21,6 +22,25 @@ type Config struct {
 	VisitorJWTSecret string `env:"VISITOR_JWT_SECRET" envDefault:"super_secret_key"`
 }
 
+// LoadConfig загружает конфигурацию из переменных окружения и флагов командной строки.
+// Приоритет: переменные окружения > флаги командной строки > значения по умолчанию.
+//
+// Поддерживаемые переменные окружения:
+//   - FILE_STORAGE_PATH: путь к файлу хранилища
+//   - SERVER_ADDRESS: адрес сервера
+//   - BASE_URL: базовый URL для сокращенных ссылок
+//   - DATABASE_DSN: строка подключения к БД
+//   - VISITOR_JWT_SECRET: секрет для JWT (по умолчанию "super_secret_key")
+//
+// Поддерживаемые флаги:
+//   - -f: путь к файлу хранилища (по умолчанию "backup.json")
+//   - -a: адрес сервера (по умолчанию "localhost:8080")
+//   - -d: строка подключения к БД
+//   - -b: базовый URL для сокращенных ссылок
+//
+// Возвращает:
+//   - *Config: загруженная конфигурация
+//   - error: ошибка загрузки конфигурации
 func LoadConfig() (*Config, error) {
 	var flagsConfig, envConfig Config
 
@@ -34,8 +54,12 @@ func LoadConfig() (*Config, error) {
 	return conf, nil
 }
 
-// MustLoadConfig возвращает панику если произошла ошибка.
-// Сделал отдельным методом по аналогии с библиотекой go-rod.
+// MustLoadConfig аналогичен LoadConfig, но вызывает panic при ошибке.
+//
+// Возвращает:
+//   - *Config: загруженная конфигурация
+//
+// Паникует при ошибке загрузки конфигурации.
 func MustLoadConfig() *Config {
 	conf, err := LoadConfig()
 	if err != nil {
@@ -44,7 +68,16 @@ func MustLoadConfig() *Config {
 	return conf
 }
 
-// loadsFlags парсит флаги командной строки.
+// loadsFlags парсит флаги командной строки в структуру Config.
+//
+// Поддерживаемые флаги:
+//   - -a: адрес сервера (по умолчанию "localhost:8080")
+//   - -f: путь к файлу хранилища (по умолчанию "backup.json")
+//   - -d: строка подключения к БД
+//   - -b: базовый URL для сокращенных ссылок (scheme://host)
+//
+// Параметры:
+//   - flagsConfig: указатель на структуру для сохранения значений флагов
 func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
 	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
@@ -68,7 +101,15 @@ func loadsFlags(flagsConfig *Config) {
 	flag.Parse()
 }
 
-// mergeConfig сливает структуры для env и флагов.
+// mergeConfig объединяет конфигурации из переменных окружения и флагов.
+// Приоритет отдается значениям из переменных окружения.
+//
+// Параметры:
+//   - envConfig: конфигурация из переменных окружения
+//   - flagsConfig: конфигурация из флагов командной строки
+//
+// Возвращает:
+//   - *Config: объединенная конфигурация
 func mergeConfig(envConfig, flagsConfig *Config) *Config {
 	return &Config{
 		ServerAddress:    defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
@@ -79,6 +120,15 @@ func mergeConfig(envConfig, flagsConfig *Config) *Config {
 	}
 }
 
+// defaultIfBlank возвращает значение по умолчанию, если переданное значение пустое.
+// Поддерживает типы string и *url.URL.
+//
+// Параметры:
+//   - value: проверяемое значение
+//   - defaultValue: значение по умолчанию
+//
+// Возвращает:
+//   - T: исходное значение или значение по умолчанию
 func defaultIfBlank[T string | *url.URL](value T, defaultValue T) T {
 	if v, ok := any(value).(string); ok && v == "" {
 		return defaultValue

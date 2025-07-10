@@ -10,7 +10,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LoggerMiddleware должен быть первый в стеке миддлваре.
+// LoggerMiddleware создает middleware для логирования HTTP запросов.
+// Должен быть первым в цепочке middleware для корректного логирования всех этапов обработки запроса.
+//
+// Логирует следующую информацию:
+//   - URI запроса
+//   - Время обработки запроса (latency)
+//   - HTTP статус ответа
+//   - HTTP метод
+//   - Content-Type заголовок
+//   - Content-Encoding заголовок
+//   - Ошибки, возникшие при обработке запроса
+//
+// Уровни логирования:
+//   - ERROR: для статусов 5xx
+//   - WARN: для статусов 4xx
+//   - INFO: для остальных статусов
+//
+// Параметры:
+//   - logger: экземпляр zap.Logger для логирования
+//
+// Возвращает:
+//   - gin.HandlerFunc: middleware функция
 func LoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if logger == nil {

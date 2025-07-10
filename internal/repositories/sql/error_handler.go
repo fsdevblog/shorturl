@@ -10,9 +10,20 @@ import (
 )
 
 const (
-	uniqueViolationCode = "23505"
+	uniqueViolationCode = "23505" // Код ошибки нарушения уникальности
 )
 
+// convertErrType конвертирует ошибки PostgreSQL в общие ошибки уровня репозитория.
+//
+// Параметры:
+//   - err: исходная ошибка
+//
+// Возвращает:
+//   - error: преобразованная ошибка или nil, если входная ошибка nil
+//
+// Преобразования ошибок:
+//   - uniqueViolationCode (23505) -> repositories.ErrDuplicateKey
+//   - другие ошибки -> repositories.ErrUnknown
 func convertErrType(err error) error {
 	if err == nil {
 		return nil
@@ -32,6 +43,13 @@ func convertErrType(err error) error {
 	return fmt.Errorf("%w: %s", repositories.ErrUnknown, err.Error())
 }
 
+// isUniqueViolationErr проверяет, является ли ошибка нарушением уникальности.
+//
+// Параметры:
+//   - err: ошибка PostgreSQL
+//
+// Возвращает:
+//   - bool: true если это ошибка нарушения уникальности
 func isUniqueViolationErr(err *pgconn.PgError) bool {
 	return err.Code == uniqueViolationCode
 }

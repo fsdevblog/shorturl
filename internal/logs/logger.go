@@ -8,31 +8,44 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// EncodingType определяет формат вывода логов.
 type EncodingType string
+
+// LevelType определяет уровень логирования.
 type LevelType string
 
 const (
-	EncodingTypeConsole EncodingType = "console"
-	EncodingTypeJSON    EncodingType = "json"
+	EncodingTypeConsole EncodingType = "console" // Форматирование для консоли
+	EncodingTypeJSON    EncodingType = "json"    // Форматирование в JSON
+
 )
 
 const (
-	LevelTypeDebug   LevelType = "debug"
-	LevelTypeInfo    LevelType = "info"
-	LevelTypeWarning LevelType = "warning"
-	LevelTypeError   LevelType = "error"
-	LevelTypeFatal   LevelType = "fatal"
-	LevelTypePanic   LevelType = "panic"
+	LevelTypeDebug   LevelType = "debug"   // Отладочный уровень
+	LevelTypeInfo    LevelType = "info"    // Информационный уровень
+	LevelTypeWarning LevelType = "warning" // Уровень предупреждений
+	LevelTypeError   LevelType = "error"   // Уровень ошибок
+	LevelTypeFatal   LevelType = "fatal"   // Фатальный уровень
+	LevelTypePanic   LevelType = "panic"   // Уровень паники
 )
 
+// LoggerOptions настройки логгера.
 type LoggerOptions struct {
-	Level            LevelType
-	Encoding         EncodingType
-	OutputPaths      []string
-	ErrorOutputPaths []string
-	InitialFields    map[string]any
+	Level            LevelType      // Уровень логирования
+	Encoding         EncodingType   // Формат вывода
+	OutputPaths      []string       // Пути вывода логов
+	ErrorOutputPaths []string       // Пути вывода ошибок
+	InitialFields    map[string]any // Начальные поля для каждой записи
 }
 
+// New создает новый логгер с указанными настройками.
+//
+// Параметры:
+//   - opts: функции для настройки логгера
+//
+// Возвращает:
+//   - *zap.Logger: настроенный логгер
+//   - error: ошибка создания логгера
 func New(opts ...func(*LoggerOptions)) (*zap.Logger, error) {
 	isProduction := os.Getenv("GIN_RELEASE") == "release"
 
@@ -96,6 +109,14 @@ func New(opts ...func(*LoggerOptions)) (*zap.Logger, error) {
 	return log, nil
 }
 
+// MustNew создает новый логгер с указанными настройками.
+// В случае ошибки вызывает panic.
+//
+// Параметры:
+//   - opts: функции для настройки логгера
+//
+// Возвращает:
+//   - *zap.Logger: настроенный логгер
 func MustNew(opts ...func(*LoggerOptions)) *zap.Logger {
 	log, err := New(opts...)
 	if err != nil {

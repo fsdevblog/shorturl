@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -66,7 +65,9 @@ func (s *ShortURLControllerSuite) SetupTest() {
 		URLService:  s.mockShortURLStore,
 		PingService: nil,
 		AppConf:     appConf,
-		Logger:      logs.New(os.Stdout),
+		Logger: logs.MustNew(func(o *logs.LoggerOptions) {
+			o.Level = logs.LevelTypeError
+		}),
 	})
 }
 

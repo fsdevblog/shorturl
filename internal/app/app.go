@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/fsdevblog/shorturl/internal/logs"
-	"github.com/sirupsen/logrus"
 
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/controllers"
@@ -20,11 +20,14 @@ import (
 type App struct {
 	config     config.Config
 	dbServices *services.Services
-	Logger     *logrus.Logger
+	Logger     *zap.Logger
 }
 
 func New(config config.Config) (*App, error) {
-	logger := logs.New(os.Stdout)
+	logger, errLogger := logs.New()
+	if errLogger != nil {
+		return nil, fmt.Errorf("init logger: %s", errLogger.Error())
+	}
 
 	ctx := context.Background()
 	dbServices, servicesErr := initServices(ctx, config)
@@ -82,13 +85,13 @@ func (a *App) Run() error {
 		}
 	}()
 
-	var serverErr error
+	var errServer error
 	select {
 	case <-ctx.Done():
 		a.Logger.Info("Shutdown command received")
-		serverErr = ctx.Err()
-	case serverErr = <-errChan:
-		a.Logger.WithError(serverErr).Error("router error")
+		errServer = ctx.Err()
+	case errServer = <-errChan:
+		a.Logger.Error("router error", zap.Error(errServer))
 	}
 
 	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
@@ -97,14 +100,18 @@ func (a *App) Run() error {
 	// Делаем бекап
 	// Из ТЗ не ясно, стоит делать бекап при подключении к БД или нет (такой бекап не имеет никакого смысла)
 	// Лучше трогать не буду, проходят тесты и слава богу.
-	if backupErr := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); backupErr != nil {
-		a.Logger.WithError(backupErr).
-			Errorf("Making backup to file `%s` error", a.config.FileStoragePath)
+	if errBackup := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); errBackup != nil {
+		a.Logger.Error("Making backup to file error",
+			zap.String("file", a.config.FileStoragePath),
+			zap.Error(errBackup),
+		)
 	} else {
-		a.Logger.Infof("Successfully made backup to file `%s`", a.config.FileStoragePath)
+		a.Logger.Info("Successfully made backup to file",
+			zap.String("file", a.config.FileStoragePath),
+		)
 	}
 
-	return serverErr
+	return errServer
 }
 
 // initServices создает подключение к базе данных и возвращает сервисный слой приложения.

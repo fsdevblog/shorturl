@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
 )
@@ -30,7 +28,6 @@ func (u *URLService) GetAllByVisitorUUID(ctx context.Context, visitorUUID string
 	if err != nil {
 		return nil, fmt.Errorf("get by visitor uuid: %w", err)
 	}
-	logrus.Infof("Get all urls by visitor uuid: %s: %+v", visitorUUID, urls)
 	return urls, nil
 }
 

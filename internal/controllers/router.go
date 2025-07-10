@@ -5,14 +5,14 @@ import (
 	"github.com/fsdevblog/shorturl/internal/controllers/middlewares"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 type RouterParams struct {
 	URLService  ShortURLStore
 	PingService ConnectionChecker
 	AppConf     config.Config
-	Logger      *logrus.Logger
+	Logger      *zap.Logger
 }
 
 func SetupRouter(params RouterParams) *gin.Engine {

@@ -9,6 +9,7 @@ import (
 
 //go:generate mockgen -source=interfaces.go -destination=mocks/mock.go -package=mocks
 
+// URLRepository описывает репозиторий для URL.
 type URLRepository interface {
 	BatchCreate(
 		ctx context.Context,

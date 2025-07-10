@@ -2,8 +2,10 @@ package models
 
 import "time"
 
+// ShortIdentifierLength длина короткой ссылки.
 const ShortIdentifierLength = 8
 
+// URL структура модели хранения URL.
 type URL struct {
 	ID              uint       `json:"ID"`
 	CreatedAt       time.Time  `json:"createdAt"`

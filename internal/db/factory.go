@@ -15,11 +15,13 @@ import (
 // StorageType определяет тип хранилища данных.
 type StorageType string
 
+// StorageTypePostgres PostgreSQL.
+// StorageTypeInMemory In-memory хранилище.
+// PostgresDefaultMigrationsDir путь к директории с миграциями по умолчанию.
 const (
-	StorageTypePostgres StorageType = "postgres" // PostgreSQL
-	StorageTypeInMemory StorageType = "inMemory" // In-memory хранилище
-	// PostgresDefaultMigrationsDir путь к директории с миграциями по умолчанию.
-	PostgresDefaultMigrationsDir = "internal/db/migrations/"
+	StorageTypePostgres          StorageType = "postgres"
+	StorageTypeInMemory          StorageType = "inMemory"
+	PostgresDefaultMigrationsDir             = "internal/db/migrations/"
 )
 
 // PostgresParams параметры подключения к PostgreSQL.

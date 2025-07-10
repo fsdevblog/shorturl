@@ -17,6 +17,7 @@ import (
 	"github.com/fsdevblog/shorturl/internal/services"
 )
 
+// App представляет собой основной объект приложения.
 type App struct {
 	config     config.Config      // Конфигурация приложения
 	dbServices *services.Services // Сервисный слой для работы с БД

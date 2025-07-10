@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// DefaultRequestTimeout таймаут запроса по умолчанию.
 const (
 	DefaultRequestTimeout = 3 * time.Second
 )

@@ -14,19 +14,26 @@ type EncodingType string
 // LevelType определяет уровень логирования.
 type LevelType string
 
+// EncodingTypeConsole Форматирование для консоли.
+// EncodingTypeJSON Форматирование в JSON.
 const (
-	EncodingTypeConsole EncodingType = "console" // Форматирование для консоли
-	EncodingTypeJSON    EncodingType = "json"    // Форматирование в JSON
-
+	EncodingTypeConsole EncodingType = "console"
+	EncodingTypeJSON    EncodingType = "json"
 )
 
+// LevelTypeDebug Отладочный уровень.
+// LevelTypeInfo Информационный уровень.
+// LevelTypeWarning Уровень предупреждений.
+// LevelTypeError Уровень ошибок.
+// LevelTypeFatal Фатальный уровень.
+// LevelTypePanic Уровень паники.
 const (
-	LevelTypeDebug   LevelType = "debug"   // Отладочный уровень
-	LevelTypeInfo    LevelType = "info"    // Информационный уровень
-	LevelTypeWarning LevelType = "warning" // Уровень предупреждений
-	LevelTypeError   LevelType = "error"   // Уровень ошибок
-	LevelTypeFatal   LevelType = "fatal"   // Фатальный уровень
-	LevelTypePanic   LevelType = "panic"   // Уровень паники
+	LevelTypeDebug   LevelType = "debug"
+	LevelTypeInfo    LevelType = "info"
+	LevelTypeWarning LevelType = "warning"
+	LevelTypeError   LevelType = "error"
+	LevelTypeFatal   LevelType = "fatal"
+	LevelTypePanic   LevelType = "panic"
 )
 
 // LoggerOptions настройки логгера.

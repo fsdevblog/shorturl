@@ -9,6 +9,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// VisitorUUIDKey Имя ключа для хранения UUID посетителя.
+// VisitorCookieName Имя куки.
+// VisitorJWTExpireDuration Срок годности JWT ключа.
 const (
 	VisitorUUIDKey           = "visitorUUID"
 	VisitorCookieName        = "visitor"

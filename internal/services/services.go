@@ -11,12 +11,14 @@ import (
 	"github.com/fsdevblog/shorturl/internal/repositories/sql"
 )
 
-// ServiceType определяет тип реализации.
+// ServiceType определяет тип реализации хранилища.
 type ServiceType string
 
+// ServiceTypePostgres указывает на использование PostgreSQL в качестве хранилища
+// ServiceTypeInMemory указывает на использование in-memory хранилища данных.
 const (
-	ServiceTypePostgres ServiceType = "postgres" // PostgreSQL реализация
-	ServiceTypeInMemory ServiceType = "inMemory" // In-memory реализация
+	ServiceTypePostgres ServiceType = "postgres"
+	ServiceTypeInMemory ServiceType = "inMemory"
 )
 
 // Services объединяет все сервисы приложения.

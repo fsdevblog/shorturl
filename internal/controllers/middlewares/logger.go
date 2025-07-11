@@ -20,6 +20,7 @@ import (
 //   - HTTP метод
 //   - Content-Type заголовок
 //   - Content-Encoding заголовок
+//   - Accept-Encoding заголовок
 //   - Ошибки, возникшие при обработке запроса
 //
 // Уровни логирования:
@@ -51,6 +52,7 @@ func LoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			zap.String("method", c.Request.Method),
 			zap.String("content-type", c.Request.Header.Get("Content-Type")),
 			zap.String("content-encoding", c.Request.Header.Get("Content-Encoding")),
+			zap.String("accept-encoding", c.Request.Header.Get("Accept-Encoding")),
 		)
 		errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
 

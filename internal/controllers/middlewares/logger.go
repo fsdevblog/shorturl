@@ -5,12 +5,35 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 )
 
-// LoggerMiddleware должен быть первый в стеке миддлваре.
-func LoggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
+// LoggerMiddleware создает middleware для логирования HTTP запросов.
+// Должен быть первым в цепочке middleware для корректного логирования всех этапов обработки запроса.
+//
+// Логирует следующую информацию:
+//   - URI запроса
+//   - Время обработки запроса (latency)
+//   - HTTP статус ответа
+//   - HTTP метод
+//   - Content-Type заголовок
+//   - Content-Encoding заголовок
+//   - Accept-Encoding заголовок
+//   - Ошибки, возникшие при обработке запроса
+//
+// Уровни логирования:
+//   - ERROR: для статусов 5xx
+//   - WARN: для статусов 4xx
+//   - INFO: для остальных статусов
+//
+// Параметры:
+//   - logger: экземпляр zap.Logger для логирования
+//
+// Возвращает:
+//   - gin.HandlerFunc: middleware функция
+func LoggerMiddleware(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if logger == nil {
 			c.Next()
@@ -22,18 +45,19 @@ func LoggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
 		latency := time.Since(start)
 
 		statusCode := c.Writer.Status()
-		l := logger.WithFields(logrus.Fields{
-			"URI":              c.Request.RequestURI,
-			"latency":          fmt.Sprintf("%d ms", latency.Milliseconds()),
-			"status":           statusCode,
-			"method":           c.Request.Method,
-			"content-type":     c.Request.Header.Get("Content-Type"),
-			"content-encoding": c.Request.Header.Get("Content-Encoding"),
-		})
+		l := logger.With(
+			zap.String("URI", c.Request.RequestURI),
+			zap.String("latency", fmt.Sprintf("%d ms", latency.Milliseconds())),
+			zap.Int("status", statusCode),
+			zap.String("method", c.Request.Method),
+			zap.String("content-type", c.Request.Header.Get("Content-Type")),
+			zap.String("content-encoding", c.Request.Header.Get("Content-Encoding")),
+			zap.String("accept-encoding", c.Request.Header.Get("Accept-Encoding")),
+		)
 		errorMessage := c.Errors.ByType(gin.ErrorTypePrivate).String()
 
 		if errorMessage != "" {
-			l = l.WithField("error", errorMessage)
+			l = l.With(zap.String("error", errorMessage))
 		}
 
 		switch {

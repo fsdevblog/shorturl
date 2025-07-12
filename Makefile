@@ -70,3 +70,11 @@ migrate-up:
 # Миграция вниз
 migrate-down:
 	migrate -database "postgres://study1-user:123123123@localhost:5435/postgres?sslmode=disable" -path ./internal/db/migrations down 1
+
+# Запустить профилирование
+
+pprof-profile:
+	go tool pprof -http=":9090" -seconds=30 http://localhost:$(SERVER_PORT)/debug/pprof/profile
+
+pprof-heap:
+	go tool pprof -http=":9090" -seconds=30 http://localhost:$(SERVER_PORT)/debug/pprof/heap

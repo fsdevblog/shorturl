@@ -10,47 +10,52 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/fsdevblog/shorturl/internal/repositories"
 )
-
-type URLRepository interface {
-	BatchCreate(ctx context.Context, mURLs []repositories.BatchCreateArg) ([]repositories.BatchResult[models.URL], error)
-	// Create вычисляет хеш короткой ссылки и создает запись в хранилище.
-	// Возвращает два значения: bool отвечает за уникальность созданной записи, 2 ошибку.
-	Create(ctx context.Context, mURL *models.URL) (*models.URL, bool, error)
-	// GetByShortIdentifier находит в хранилище запись по заданному хешу ссылки
-	GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error)
-	// GetByURL находит запись в хранилище по заданной ссылке
-	GetByURL(ctx context.Context, rawURL string) (*models.URL, error)
-	// GetAll возвращает все записи в бд. Сразу пачкой.
-	GetAll(ctx context.Context) ([]models.URL, error)
-	// GetAllByVisitorUUID возвращает записи связанные с visitorUUID.
-	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
-	// DeleteByShortIDsVisitorUUID помечает записи как удаленные.
-	DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) error
-}
 
 // URLService Сервис работает с базой данных в контексте таблицы `urls`.
 type URLService struct {
 	urlRepo URLRepository
 }
 
+// NewURLService создает новый экземпляр сервиса URL.
+//
+// Параметры:
+//   - urlRepo: репозиторий для работы с URL
+//
+// Возвращает:
+//   - *URLService: инициализированный сервис
 func NewURLService(urlRepo URLRepository) *URLService {
 	return &URLService{urlRepo: urlRepo}
 }
 
+// GetAllByVisitorUUID получает все URL для указанного посетителя.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - visitorUUID: идентификатор посетителя
+//
+// Возвращает:
+//   - []models.URL: список URL
+//   - error: ошибка получения данных
 func (u *URLService) GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error) {
 	urls, err := u.urlRepo.GetAllByVisitorUUID(ctx, visitorUUID)
 	if err != nil {
 		return nil, fmt.Errorf("get by visitor uuid: %w", err)
 	}
-	logrus.Infof("Get all urls by visitor uuid: %s: %+v", visitorUUID, urls)
 	return urls, nil
 }
 
+// GetByShortIdentifier получает URL по короткому идентификатору.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - shortID: короткий идентификатор URL
+//
+// Возвращает:
+//   - *models.URL: найденный URL
+//   - error: ErrRecordNotFound если не найден, ErrUnknown при других ошибках
 func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (*models.URL, error) {
 	sURL, err := u.urlRepo.GetByShortIdentifier(ctx, shortID)
 	if err != nil {
@@ -62,7 +67,16 @@ func (u *URLService) GetByShortIdentifier(ctx context.Context, shortID string) (
 	return sURL, nil
 }
 
-// BatchCreate Создает урлы пачками.
+// BatchCreate создает несколько URL одновременно.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - visitorUUID: идентификатор посетителя
+//   - rawURLs: список URL для создания
+//
+// Возвращает:
+//   - *BatchCreateShortURLsResponse: результат создания
+//   - error: ErrUnknown при ошибке
 func (u *URLService) BatchCreate(
 	ctx context.Context,
 	visitorUUID string,
@@ -82,9 +96,9 @@ func (u *URLService) BatchCreate(
 	if batchErr != nil {
 		return nil, fmt.Errorf("%w: batch create: %s", ErrUnknown, batchErr.Error())
 	}
-	batchResponse := NewBatchExecResponse[models.URL](len(batchResults))
+	batchResponse := NewBatchExecResponse[models.URL](len(batchResults.Results))
 
-	for i, result := range batchResults {
+	for i, result := range batchResults.Results {
 		batchResponse.results[i].Item = result.Value
 		var err = result.Err
 		if result.Err != nil && errors.Is(result.Err, repositories.ErrDuplicateKey) {
@@ -95,6 +109,15 @@ func (u *URLService) BatchCreate(
 	return NewBatchExecResponseURL(batchResponse), nil
 }
 
+// GetByURL получает URL по оригинальному адресу.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - rawURL: оригинальный URL
+//
+// Возвращает:
+//   - *models.URL: найденный URL
+//   - error: ErrRecordNotFound если не найден, ErrUnknown при других ошибках
 func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, error) {
 	res, err := u.urlRepo.GetByURL(ctx, rawURL)
 
@@ -107,6 +130,17 @@ func (u *URLService) GetByURL(ctx context.Context, rawURL string) (*models.URL, 
 	return res, nil
 }
 
+// Create создает новый URL.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - visitorUUID: идентификатор посетителя
+//   - rawURL: оригинальный URL
+//
+// Возвращает:
+//   - *models.URL: созданный URL
+//   - bool: true если создан новый, false если обновлен существующий
+//   - error: ErrUnknown при ошибке
 func (u *URLService) Create(ctx context.Context, visitorUUID string, rawURL string) (*models.URL, bool, error) {
 	var sURL = models.URL{
 		URL:             rawURL,
@@ -120,6 +154,14 @@ func (u *URLService) Create(ctx context.Context, visitorUUID string, rawURL stri
 	return m, isUniq, nil
 }
 
+// Backup сохраняет все URL в файл.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - path: путь к файлу бэкапа
+//
+// Возвращает:
+//   - error: ошибка создания бэкапа
 func (u *URLService) Backup(ctx context.Context, path string) (err error) {
 	backupFile, backupFileErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if backupFileErr != nil {
@@ -150,6 +192,14 @@ func (u *URLService) Backup(ctx context.Context, path string) (err error) {
 	return nil
 }
 
+// RestoreBackup восстанавливает URL из файла бэкапа.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - path: путь к файлу бэкапа
+//
+// Возвращает:
+//   - error: ошибка восстановления
 func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error) {
 	file, fileErr := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0644)
 	if fileErr != nil {
@@ -192,6 +242,15 @@ func (u *URLService) RestoreBackup(ctx context.Context, path string) (err error)
 	return nil
 }
 
+// MarkAsDeleted помечает URL как удаленные.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - shortIDs: список коротких идентификаторов
+//   - visitorUUID: идентификатор посетителя
+//
+// Возвращает:
+//   - error: ошибка удаления
 func (u *URLService) MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error {
 	if err := u.urlRepo.DeleteByShortIDsVisitorUUID(ctx, visitorUUID, shortIDs); err != nil {
 		return fmt.Errorf("delete by short ids %+v, visitor uuid: %s: %w", shortIDs, visitorUUID, err)
@@ -199,7 +258,15 @@ func (u *URLService) MarkAsDeleted(ctx context.Context, shortIDs []string, visit
 	return nil
 }
 
-// generateShortID генерирует идентификатор для ссылки нужной длины на основе visitorUUID.
+// generateShortID генерирует короткий идентификатор для URL.
+//
+// Параметры:
+//   - rawURL: оригинальный URL
+//   - length: требуемая длина идентификатора
+//   - visitorUUID: идентификатор посетителя
+//
+// Возвращает:
+//   - string: сгенерированный короткий идентификатор
 func generateShortID(rawURL string, length int, visitorUUID string) string {
 	// Добавляем счетчик к срезу (для избежания коллизий)
 	b := []byte(rawURL)

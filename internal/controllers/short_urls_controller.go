@@ -18,14 +18,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// hostnameRegex в соответствии с `RFC 1123` за исключением - исключает корневые доменные имена (без зоны).
+// hostnameRegex регулярное выражение для проверки hostname в соответствии с RFC 1123.
+// Исключает корневые доменные имена (без зоны).
 var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-Z0-9](-?[a-zA-Z0-9])*)$`)
 
+// ShortURLController обрабатывает HTTP запросы для работы с короткими URL.
+// Предоставляет методы для создания, получения и управления короткими URL.
 type ShortURLController struct {
 	urlService ShortURLStore
 	baseURL    *url.URL
 }
 
+// NewShortURLController создает новый экземпляр ShortURLController.
+//
+// Параметры:
+//   - urlService: сервис для работы с URL
+//   - baseURL: базовый URL для генерации коротких ссылок
+//
+// Возвращает:
+//   - *ShortURLController: новый экземпляр контроллера
 func NewShortURLController(urlService ShortURLStore, baseURL *url.URL) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
@@ -33,20 +44,36 @@ func NewShortURLController(urlService ShortURLStore, baseURL *url.URL) *ShortURL
 	}
 }
 
+// BatchCreateParams параметры для пакетного создания URL.
 type BatchCreateParams struct {
+	// CorrelationID уникальный идентификатор для корреляции запроса
 	CorrelationID string `json:"correlation_id"`
-	OriginalURL   string `json:"original_url"`
-}
-type BatchCreateResponse struct {
-	CorrelationID string `json:"correlation_id"`
-	ShortURL      string `json:"short_url,omitempty"`
+	// OriginalURL исходный URL для сокращения
+	OriginalURL string `json:"original_url"`
 }
 
+// BatchCreateResponse ответ на пакетное создание URL.
+type BatchCreateResponse struct {
+	// CorrelationID идентификатор соответствующего запроса
+	CorrelationID string `json:"correlation_id"`
+	// ShortURL сгенерированный короткий URL
+	ShortURL string `json:"short_url,omitempty"`
+}
+
+// URLResponse структура ответа.
 type URLResponse struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 }
 
+// UserURLs возвращает список всех URL, созданных текущим пользователем.
+// Требует наличия VisitorUUID в контексте запроса.
+//
+// Коды ответа:
+//   - 200: успешное получение списка URL
+//   - 204: у пользователя нет созданных URL
+//   - 403: отсутствует или недействителен VisitorUUID
+//   - 500: внутренняя ошибка сервера
 func (s *ShortURLController) UserURLs(c *gin.Context) {
 	vu, _ := c.Get(middlewares.VisitorUUIDKey)
 	visitorUUID, vOK := vu.(string)
@@ -79,6 +106,15 @@ func (s *ShortURLController) UserURLs(c *gin.Context) {
 	c.JSON(http.StatusOK, r)
 }
 
+// BatchCreate создает несколько коротких URL одновременно.
+// Принимает массив BatchCreateParams в формате JSON.
+//
+// Коды ответа:
+//   - 201: URL успешно созданы
+//   - 400: некорректный запрос
+//   - 401: пользователь не авторизован
+//   - 409: обнаружен конфликт (дубликат URL)
+//   - 500: внутренняя ошибка сервера
 func (s *ShortURLController) BatchCreate(c *gin.Context) {
 	vu, _ := c.Get(middlewares.VisitorUUIDKey)
 	visitorUUID, vOK := vu.(string)
@@ -156,6 +192,16 @@ func (s *ShortURLController) BatchCreate(c *gin.Context) {
 	c.JSON(statusCode, response)
 }
 
+// Redirect выполняет перенаправление с короткого URL на оригинальный.
+//
+// Параметры URL:
+//   - shortID: короткий идентификатор URL
+//
+// Коды ответа:
+//   - 307: временное перенаправление
+//   - 404: URL не найден
+//   - 410: URL был удален
+//   - 500: внутренняя ошибка сервера
 func (s *ShortURLController) Redirect(c *gin.Context) {
 	sIdentifier := c.Param("shortID")
 
@@ -191,7 +237,15 @@ type createParams struct {
 	URL string `json:"url"`
 }
 
-// CreateShortURL создает ссылку.
+// CreateShortURL создает новый короткий URL.
+// Принимает URL в формате JSON или plain text.
+//
+// Коды ответа:
+//   - 201: URL успешно создан
+//   - 409: URL уже существует
+//   - 422: некорректный URL
+//   - 401: пользователь не авторизован
+//   - 500: внутренняя ошибка сервера
 func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	vu, _ := c.Get(middlewares.VisitorUUIDKey)
 	visitorUUID, ok := vu.(string)
@@ -232,7 +286,14 @@ func (s *ShortURLController) CreateShortURL(c *gin.Context) {
 	}
 }
 
-// DeleteUserURLs DELETE /api/user/urls.
+// DeleteUserURLs удаляет URL пользователя.
+// Принимает массив идентификаторов URL в формате JSON.
+//
+// Коды ответа:
+//   - 202: запрос на удаление принят
+//   - 400: некорректный запрос
+//   - 403: доступ запрещен
+//   - 500: внутренняя ошибка сервера
 func (s *ShortURLController) DeleteUserURLs(c *gin.Context) {
 	var ids []string
 	if bindErr := c.ShouldBindJSON(&ids); bindErr != nil || len(ids) == 0 {
@@ -259,7 +320,12 @@ func (s *ShortURLController) DeleteUserURLs(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
-// bindCreateParams байндит json или application/x-www-form-urlencoded запросы для создания ссылки.
+// bindCreateParams байндит параметры создания URL из запроса.
+// Поддерживает форматы JSON и application/x-www-form-urlencoded.
+//
+// Возвращает:
+//   - *createParams: параметры создания URL
+//   - error: ошибка при обработке запроса
 func (s *ShortURLController) bindCreateParams(c *gin.Context) (*createParams, error) {
 	var params createParams
 	body, readErr := io.ReadAll(c.Request.Body)
@@ -279,7 +345,14 @@ func (s *ShortURLController) bindCreateParams(c *gin.Context) (*createParams, er
 	return &params, nil
 }
 
-// getShortURL вспомогательный метод который создает короткую ссылку.
+// getShortURL формирует полный короткий URL на основе идентификатора.
+//
+// Параметры:
+//   - r: HTTP запрос
+//   - shortID: короткий идентификатор URL
+//
+// Возвращает:
+//   - string: полный короткий URL
 func (s *ShortURLController) getShortURL(r *http.Request, shortID string) string {
 	var scheme = "http"
 	if r.TLS != nil {
@@ -291,7 +364,19 @@ func (s *ShortURLController) getShortURL(r *http.Request, shortID string) string
 	return fmt.Sprintf("%s/%s", s.baseURL, shortID)
 }
 
-// validateURL проверяет, является ли строка корректным URL.
+// validateURL проверяет корректность URL.
+//
+// Параметры:
+//   - rawURL: URL для проверки
+//
+// Возвращает:
+//   - *url.URL: распарсенный URL
+//   - error: ошибка валидации
+//
+// Правила валидации:
+//   - URL должен иметь схему http или https
+//   - URL должен содержать хост
+//   - Hostname должен соответствовать RFC 1123 или быть localhost
 func validateURL(rawURL string) (*url.URL, error) {
 	parsedURL, err := url.ParseRequestURI(rawURL)
 

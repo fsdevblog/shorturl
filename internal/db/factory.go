@@ -12,24 +12,39 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+// StorageType определяет тип хранилища данных.
 type StorageType string
 
+// StorageTypePostgres PostgreSQL.
+// StorageTypeInMemory In-memory хранилище.
+// PostgresDefaultMigrationsDir путь к директории с миграциями по умолчанию.
 const (
-	StorageTypePostgres StorageType = "postgres"
-	StorageTypeInMemory StorageType = "inMemory"
-
-	PostgresDefaultMigrationsDir = "internal/db/migrations/"
+	StorageTypePostgres          StorageType = "postgres"
+	StorageTypeInMemory          StorageType = "inMemory"
+	PostgresDefaultMigrationsDir             = "internal/db/migrations/"
 )
 
+// PostgresParams параметры подключения к PostgreSQL.
 type PostgresParams struct {
-	DSN           string
-	MigrationsDir string
-}
-type FactoryConfig struct {
-	StorageType    StorageType
-	PostgresParams *PostgresParams
+	DSN           string // Строка подключения
+	MigrationsDir string // Директория с миграциями
 }
 
+// FactoryConfig конфигурация фабрики подключений.
+type FactoryConfig struct {
+	StorageType    StorageType     // Тип хранилища
+	PostgresParams *PostgresParams // Параметры PostgreSQL
+}
+
+// NewConnectionFactory создает новое подключение к хранилищу данных.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - config: конфигурация подключения
+//
+// Возвращает:
+//   - any: интерфейс подключения к хранилищу (PostgreSQL pool или MStorage)
+//   - error: ошибка создания подключения
 func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error) {
 	switch config.StorageType {
 	case StorageTypePostgres:
@@ -60,6 +75,14 @@ func NewConnectionFactory(ctx context.Context, config FactoryConfig) (any, error
 	}
 }
 
+// postgresMigrate выполняет миграции схемы базы данных PostgreSQL.
+//
+// Параметры:
+//   - dir: путь к директории с файлами миграций
+//   - dsn: строка подключения к PostgreSQL
+//
+// Возвращает:
+//   - error: ошибка выполнения миграций
 func postgresMigrate(dir string, dsn string) error {
 	m, mErr := migrate.New("file://"+dir, dsn)
 	if mErr != nil {

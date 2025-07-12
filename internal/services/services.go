@@ -11,18 +11,31 @@ import (
 	"github.com/fsdevblog/shorturl/internal/repositories/sql"
 )
 
+// ServiceType определяет тип реализации хранилища.
 type ServiceType string
 
+// ServiceTypePostgres указывает на использование PostgreSQL в качестве хранилища
+// ServiceTypeInMemory указывает на использование in-memory хранилища данных.
 const (
 	ServiceTypePostgres ServiceType = "postgres"
 	ServiceTypeInMemory ServiceType = "inMemory"
 )
 
+// Services объединяет все сервисы приложения.
 type Services struct {
-	URLService  *URLService
-	PingService *PingService
+	URLService  *URLService  // Сервис для работы с URL
+	PingService *PingService // Сервис для проверки соединения
 }
 
+// Factory создает набор сервисов в зависимости от указанного типа.
+//
+// Параметры:
+//   - conn: соединение с хранилищем данных
+//   - sType: тип сервисов (ServiceTypePostgres или ServiceTypeInMemory)
+//
+// Возвращает:
+//   - *Services: инициализированные сервисы
+//   - error: ошибка создания сервисов
 func Factory(conn any, sType ServiceType) (*Services, error) {
 	switch sType {
 	case ServiceTypePostgres:
@@ -38,6 +51,13 @@ func Factory(conn any, sType ServiceType) (*Services, error) {
 	}
 }
 
+// getSQLServices создает сервисы для работы с PostgreSQL.
+//
+// Параметры:
+//   - conn: пул подключений к PostgreSQL
+//
+// Возвращает:
+//   - *Services: сервисы с PostgreSQL реализацией
 func getSQLServices(conn *pgxpool.Pool) *Services {
 	urlRepo := sql.NewURLRepo(conn)
 	return &Services{
@@ -46,6 +66,10 @@ func getSQLServices(conn *pgxpool.Pool) *Services {
 	}
 }
 
+// getInMemoryServices создает сервисы для работы с in-memory хранилищем.
+//
+// Возвращает:
+//   - *Services: сервисы с in-memory реализацией
 func getInMemoryServices() *Services {
 	store := db.NewMemStorage()
 	urlRepo := memstore.NewURLRepo(store)

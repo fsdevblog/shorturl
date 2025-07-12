@@ -8,11 +8,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+// VisitorClaims представляет данные JWT токена посетителя.
 type VisitorClaims struct {
 	jwt.RegisteredClaims
 	UUID string
 }
 
+// GenerateVisitorJWT создает JWT токен для посетителя.
+//
+// Параметры:
+//   - uuid: уникальный идентификатор посетителя
+//   - expire: срок действия токена
+//   - key: ключ для подписи токена
+//
+// Возвращает:
+//   - string: сгенерированный JWT токен
+//   - error: ошибка генерации токена
 func GenerateVisitorJWT(uuid string, expire time.Duration, key []byte) (string, error) {
 	visitorClaims := VisitorClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -27,6 +38,15 @@ func GenerateVisitorJWT(uuid string, expire time.Duration, key []byte) (string, 
 	return token, nil
 }
 
+// ValidateVisitorJWT проверяет JWT токен посетителя.
+//
+// Параметры:
+//   - tokenString: JWT токен в виде строки
+//   - key: ключ для проверки подписи
+//
+// Возвращает:
+//   - *jwt.Token: проверенный токен
+//   - error: ошибка проверки (ErrTokenExpired если истек срок действия)
 func ValidateVisitorJWT(tokenString string, key []byte) (*jwt.Token, error) {
 	token, err := validateJWT(tokenString, new(VisitorClaims), key)
 	if err != nil {
@@ -40,6 +60,15 @@ func ValidateVisitorJWT(tokenString string, key []byte) (*jwt.Token, error) {
 	return token, nil
 }
 
+// generateJWT создает JWT токен с указанными данными.
+//
+// Параметры:
+//   - claims: данные для включения в токен
+//   - key: ключ для подписи
+//
+// Возвращает:
+//   - string: сгенерированный JWT токен
+//   - error: ошибка генерации
 func generateJWT(claims jwt.Claims, key []byte) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(key)
@@ -50,6 +79,16 @@ func generateJWT(claims jwt.Claims, key []byte) (string, error) {
 	return tokenString, nil
 }
 
+// validateJWT проверяет JWT токен.
+//
+// Параметры:
+//   - tokenString: JWT токен в виде строки
+//   - claims: структура для разбора данных токена
+//   - key: ключ для проверки подписи
+//
+// Возвращает:
+//   - *jwt.Token: проверенный токен
+//   - error: ошибка проверки
 func validateJWT(tokenString string, claims jwt.Claims, key []byte) (*jwt.Token, error) {
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (any, error) {
 		return key, nil

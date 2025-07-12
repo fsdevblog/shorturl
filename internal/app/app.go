@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/fsdevblog/shorturl/internal/logs"
-	"github.com/sirupsen/logrus"
 
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/controllers"
@@ -17,14 +17,26 @@ import (
 	"github.com/fsdevblog/shorturl/internal/services"
 )
 
+// App представляет собой основной объект приложения.
 type App struct {
-	config     config.Config
-	dbServices *services.Services
-	Logger     *logrus.Logger
+	config     config.Config      // Конфигурация приложения
+	dbServices *services.Services // Сервисный слой для работы с БД
+	Logger     *zap.Logger        // Логгер приложения
 }
 
+// New создает новый экземпляр приложения.
+//
+// Параметры:
+//   - config: конфигурация приложения
+//
+// Возвращает:
+//   - *App: экземпляр приложения
+//   - error: ошибка инициализации
 func New(config config.Config) (*App, error) {
-	logger := logs.New(os.Stdout)
+	logger, errLogger := logs.New()
+	if errLogger != nil {
+		return nil, fmt.Errorf("init logger: %s", errLogger.Error())
+	}
 
 	ctx := context.Background()
 	dbServices, servicesErr := initServices(ctx, config)
@@ -40,7 +52,16 @@ func New(config config.Config) (*App, error) {
 	}, nil
 }
 
-// Must вызывает панику если произошла ошибка.
+// Must обертка над конструктором, вызывающая panic при ошибке.
+//
+// Параметры:
+//   - a: экземпляр приложения
+//   - err: ошибка
+//
+// Возвращает:
+//   - *App: экземпляр приложения
+//
+// Паникует при err != nil.
 func Must(a *App, err error) *App {
 	if err != nil {
 		panic(err)
@@ -48,6 +69,11 @@ func Must(a *App, err error) *App {
 	return a
 }
 
+// restoreBackup восстанавливает данные из резервной копии (для in-memory хранилища).
+// Использует таймаут 10 секунд для операции восстановления.
+//
+// Возвращает:
+//   - error: ошибка восстановления данных из файла
 func (a *App) restoreBackup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
 	defer cancel()
@@ -58,7 +84,13 @@ func (a *App) restoreBackup() error {
 	return nil
 }
 
-// Run запускает web сервер.
+// Run запускает web сервер и обрабатывает сигналы завершения.
+// При получении сигнала SIGINT или SIGTERM выполняет корректное завершение:
+//   - Создает резервную копию данных, если используется in-memory хранилище
+//   - Завершает работу сервера
+//
+// Возвращает:
+//   - error: ошибка работы сервера
 func (a *App) Run() error {
 	if restoreErr := a.restoreBackup(); restoreErr != nil {
 		return fmt.Errorf("run app: %w", restoreErr)
@@ -82,12 +114,13 @@ func (a *App) Run() error {
 		}
 	}()
 
-	var serverErr error
+	var errServer error
 	select {
 	case <-ctx.Done():
 		a.Logger.Info("Shutdown command received")
-	case serverErr = <-errChan:
-		a.Logger.WithError(serverErr).Error("router error")
+		errServer = ctx.Err()
+	case errServer = <-errChan:
+		a.Logger.Error("router error", zap.Error(errServer))
 	}
 
 	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
@@ -96,17 +129,30 @@ func (a *App) Run() error {
 	// Делаем бекап
 	// Из ТЗ не ясно, стоит делать бекап при подключении к БД или нет (такой бекап не имеет никакого смысла)
 	// Лучше трогать не буду, проходят тесты и слава богу.
-	if backupErr := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); backupErr != nil {
-		a.Logger.WithError(backupErr).
-			Errorf("Making backup to file `%s` error", a.config.FileStoragePath)
+	if errBackup := a.dbServices.URLService.Backup(backupCtx, a.config.FileStoragePath); errBackup != nil {
+		a.Logger.Error("Making backup to file error",
+			zap.String("file", a.config.FileStoragePath),
+			zap.Error(errBackup),
+		)
 	} else {
-		a.Logger.Infof("Successfully made backup to file `%s`", a.config.FileStoragePath)
+		a.Logger.Info("Successfully made backup to file",
+			zap.String("file", a.config.FileStoragePath),
+		)
 	}
 
-	return serverErr
+	return errServer
 }
 
-// initServices создает подключение к базе данных и возвращает сервисный слой приложения.
+// initServices инициализирует сервисный слой приложения.
+// Определяет тип хранилища (PostgreSQL или in-memory) на основе конфигурации.
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - *services.Services: инициализированный сервисный слой
+//   - error: ошибка инициализации
 func initServices(ctx context.Context, appConf config.Config) (*services.Services, error) {
 	// Нужно определить тип хранилища
 
@@ -127,6 +173,13 @@ func initServices(ctx context.Context, appConf config.Config) (*services.Service
 	return dbServices, nil
 }
 
+// whatIsDBStorageType определяет тип хранилища на основе конфигурации.
+//
+// Параметры:
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - db.StorageType: тип хранилища (StorageTypePostgres или StorageTypeInMemory)
 func whatIsDBStorageType(appConf *config.Config) db.StorageType {
 	if appConf.DatabaseDSN != "" {
 		return db.StorageTypePostgres
@@ -134,6 +187,13 @@ func whatIsDBStorageType(appConf *config.Config) db.StorageType {
 	return db.StorageTypeInMemory
 }
 
+// whatIsServiceType определяет тип сервиса на основе конфигурации.
+//
+// Параметры:
+//   - appConf: конфигурация приложения
+//
+// Возвращает:
+//   - services.ServiceType: тип сервиса (ServiceTypePostgres или ServiceTypeInMemory)
 func whatIsServiceType(appConf *config.Config) services.ServiceType {
 	if appConf.DatabaseDSN != "" {
 		return services.ServiceTypePostgres

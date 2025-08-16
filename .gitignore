@@ -28,4 +28,5 @@ vendor/
 .vscode
 *.sqlite
 
-cli/shortenertestbeta
+cli/*
+!cli/.keep

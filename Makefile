@@ -42,7 +42,7 @@ all: build
 
 # Билд приложения
 build:
-	cd $(CMD_DIR) && go build -o $(BINARY) *.go
+	cd $(CMD_DIR) && go build -ldflags "-X main.buildVersion=1.0.0 -X main.buildDate=$$(date +%Y-%m-%d) -X main.buildCommit=$$(git rev-parse --short HEAD)" -o $(BINARY) *.go
 
 # Очистка скомпилированного бинарника
 clean:

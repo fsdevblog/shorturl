@@ -76,3 +76,11 @@ Showing nodes accounting for -34.58MB, 59.30% of 58.32MB total
 ```
 
 Также, без всякого профилирования, было ясно что использовавшийся ранее логгер `logrus` следует заменить на `zap`, что и было сделано. 
+
+## Сборка
+
+Передача информации версии даты и коммита используется с помощью флагов линкера `-ldflags`:
+
+```
+   go build -ldflags "-X main.buildVersion=1.0.0 -X main.buildDate=$(date +%Y-%m-%d) -X main.buildCommit=$(git rev-parse --short HEAD)" -o shortener ./cmd/shortener
+```

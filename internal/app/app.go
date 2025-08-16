@@ -112,20 +112,17 @@ func (a *App) Run() error {
 
 	go func() {
 		if a.config.EnableHTTPS {
-			certService := svccert.New()
+			certService := svccert.New(func(o *svccert.Options) {
+				o.CertFilePath = "certs/cert.pem"
+				o.KeyFilePath = "certs/key.pem"
+			})
 			errGen := certService.GenerateAndSaveIfNeed()
 			if errGen != nil {
 				errChan <- errGen
 				return
 			}
 
-			cert, key, errRead := certService.PairString()
-			if errRead != nil {
-				errChan <- errRead
-				return
-			}
-
-			err := server.RunTLS(a.config.ServerAddress, cert, key)
+			err := server.RunTLS(a.config.ServerAddress, certService.CertFilePath(), certService.KeyFilePath())
 			if err != nil {
 				errChan <- err
 			}

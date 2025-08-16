@@ -51,48 +51,14 @@ func New(opts ...func(*Options)) *Cert {
 	}
 }
 
-// CertString возвращает содержимое файла сертификата в виде строки.
-//
-// Возвращает:
-//   - string: содержимое сертификата.
-//   - error: ошибка при чтении файла.
-func (c *Cert) CertString() (string, error) {
-	cert, err := os.ReadFile(c.certFilePath)
-	if err != nil {
-		return "", fmt.Errorf("read certificate file: %w", err)
-	}
-	return string(cert), nil
+// KeyFilePath возвращает путь до файла с приватным ключом.
+func (c *Cert) KeyFilePath() string {
+	return c.keyFilePath
 }
 
-// KeyString возвращает содержимое файла приватного ключа в виде строки.
-//
-// Возвращает:
-//   - string: содержимое приватного ключа.
-//   - error: ошибка при чтении файла.
-func (c *Cert) KeyString() (string, error) {
-	key, err := os.ReadFile(c.keyFilePath)
-	if err != nil {
-		return "", fmt.Errorf("read key file: %w", err)
-	}
-	return string(key), nil
-}
-
-// PairString возвращает пару сертификат/ключ в виде строк.
-//
-// Возвращает:
-//   - string: содержимое сертификата.
-//   - string: содержимое приватного ключа.
-//   - error: ошибка при чтении файлов.
-func (c *Cert) PairString() (string, string, error) {
-	key, errKey := c.KeyString()
-	if errKey != nil {
-		return "", "", errKey
-	}
-	cert, errCert := c.CertString()
-	if errCert != nil {
-		return "", "", errCert
-	}
-	return cert, key, nil
+// CertFilePath возвращает путь до файла с сертификатом.
+func (c *Cert) CertFilePath() string {
+	return c.certFilePath
 }
 
 // GenerateAndSaveIfNeed проверяет существующие файлы сертификата и ключа.

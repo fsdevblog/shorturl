@@ -30,3 +30,5 @@ vendor/
 
 cli/*
 !cli/.keep
+certs/*
+!certs/.keep

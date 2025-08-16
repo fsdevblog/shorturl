@@ -26,7 +26,7 @@ var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9](-?[a-zA-Z0-9])*\.)+([a-zA-
 // Предоставляет методы для создания, получения и управления короткими URL.
 type ShortURLController struct {
 	urlService ShortURLStore
-	baseURL    *url.URL
+	baseURL    string
 }
 
 // NewShortURLController создает новый экземпляр ShortURLController.
@@ -37,7 +37,7 @@ type ShortURLController struct {
 //
 // Возвращает:
 //   - *ShortURLController: новый экземпляр контроллера
-func NewShortURLController(urlService ShortURLStore, baseURL *url.URL) *ShortURLController {
+func NewShortURLController(urlService ShortURLStore, baseURL string) *ShortURLController {
 	return &ShortURLController{
 		urlService: urlService,
 		baseURL:    baseURL,
@@ -358,7 +358,7 @@ func (s *ShortURLController) getShortURL(r *http.Request, shortID string) string
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	if s.baseURL == nil {
+	if s.baseURL == "" {
 		return fmt.Sprintf("%s://%s/%s", scheme, r.Host, shortID)
 	}
 	return fmt.Sprintf("%s/%s", s.baseURL, shortID)

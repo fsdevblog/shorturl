@@ -15,12 +15,13 @@ type Config struct {
 	// Путь для бекапа (актуально мемори хранилища).
 	FileStoragePath string `env:"FILE_STORAGE_PATH" json:"file_storage_path"`
 	// HTTPS сервер.
-	EnableHTTPS bool   `env:"ENABLE_HTTPS" envDefault:"false" json:"enable_https"`
-	ConfigJSON  string `env:"CONFIG"       json:"-"`
-	// Порт на котором запустится сервер
+	EnableHTTPS bool `env:"ENABLE_HTTPS" envDefault:"false" json:"enable_https"`
+	// Конфиг файл.
+	ConfigJSON string `env:"CONFIG" json:"-"`
+	// Адрес сервера.
 	ServerAddress string `env:"SERVER_ADDRESS" json:"server_address"`
 	// Базовый адрес результирующего сокращенного URL
-	BaseURL *url.URL `env:"BASE_URL" json:"base_url"`
+	BaseURL string `env:"BASE_URL" json:"base_url"`
 	// DSN базы данных
 	DatabaseDSN string `env:"DATABASE_DSN" json:"database_dsn"`
 	// Секретный ключ для JWT токена посетителей.
@@ -84,6 +85,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	conf := mergeConfigs(&envConfig, &flagsConfig, fileConfig)
+
 	return conf, nil
 }
 
@@ -94,28 +96,28 @@ func LoadConfig() (*Config, error) {
 // 3. Файл конфигурации.
 func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
 	return &Config{
-		ServerAddress: firstNonEmptyString(
+		ServerAddress: firstNonEmpty(
 			flagsConfig.ServerAddress,
 			envConfig.ServerAddress,
 			fileConfig.ServerAddress,
 		),
-		BaseURL: firstNonEmptyURL(
+		BaseURL: firstNonEmpty(
 			flagsConfig.BaseURL,
 			envConfig.BaseURL,
 			fileConfig.BaseURL,
 		),
-		DatabaseDSN: firstNonEmptyString(
+		DatabaseDSN: firstNonEmpty(
 			flagsConfig.DatabaseDSN,
 			envConfig.DatabaseDSN,
 			fileConfig.DatabaseDSN,
 		),
-		FileStoragePath: firstNonEmptyString(
+		FileStoragePath: firstNonEmpty(
 			flagsConfig.FileStoragePath,
 			envConfig.FileStoragePath,
 			fileConfig.FileStoragePath,
 		),
 		EnableHTTPS: flagsConfig.EnableHTTPS || envConfig.EnableHTTPS || fileConfig.EnableHTTPS,
-		VisitorJWTSecret: firstNonEmptyString(
+		VisitorJWTSecret: firstNonEmpty(
 			flagsConfig.VisitorJWTSecret,
 			envConfig.VisitorJWTSecret,
 			fileConfig.VisitorJWTSecret,
@@ -123,24 +125,14 @@ func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
 	}
 }
 
-// firstNonEmptyString возвращает первое непустое строковое значение из списка.
-func firstNonEmptyString(values ...string) string {
+// firstNonEmpty возвращает первое непустое строковое значение из списка.
+func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if v != "" {
 			return v
 		}
 	}
 	return ""
-}
-
-// firstNonEmptyURL возвращает первый непустой URL из списка.
-func firstNonEmptyURL(values ...*url.URL) *url.URL {
-	for _, v := range values {
-		if v != nil {
-			return v
-		}
-	}
-	return nil
 }
 
 // MustLoadConfig аналогичен LoadConfig, но вызывает panic при ошибке.
@@ -183,11 +175,12 @@ func loadsFlags(flagsConfig *Config) {
 			return fmt.Errorf("parse base url: %w", err)
 		}
 
-		// создаем новый инстанс, отсекая тем самым Path и Query если они заданы в базовом урле.
-		flagsConfig.BaseURL = &url.URL{
+		s := url.URL{
 			Scheme: parsedURL.Scheme,
 			Host:   parsedURL.Host,
 		}
+		// создаем новый инстанс, отсекая тем самым Path и Query если они заданы в базовом урле.
+		flagsConfig.BaseURL = s.String()
 		return nil
 	})
 

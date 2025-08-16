@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 
 	"github.com/fsdevblog/shorturl/internal/config"
 	"github.com/fsdevblog/shorturl/internal/controllers/mocksctrl"
@@ -33,7 +32,7 @@ func ExampleShortURLController_CreateShortURL() {
 		PingService: nil,
 		AppConf: config.Config{
 			ServerAddress:    ":80",
-			BaseURL:          &url.URL{Scheme: "http", Host: "test.com"},
+			BaseURL:          "http://test.com",
 			VisitorJWTSecret: "secret",
 		},
 		Logger: logs.MustNew(func(o *logs.LoggerOptions) {

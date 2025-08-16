@@ -1,9 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/url"
+	"os"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -11,17 +13,32 @@ import (
 // Config содержит параметры конфигурации приложения.
 type Config struct {
 	// Путь для бекапа (актуально мемори хранилища).
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH" json:"file_storage_path"`
 	// HTTPS сервер.
-	EnableHTTPS bool `env:"ENABLE_HTTPS" envDefault:"false"`
+	EnableHTTPS bool   `env:"ENABLE_HTTPS" envDefault:"false" json:"enable_https"`
+	ConfigJSON  string `env:"CONFIG"       json:"-"`
 	// Порт на котором запустится сервер
-	ServerAddress string `env:"SERVER_ADDRESS"`
+	ServerAddress string `env:"SERVER_ADDRESS" json:"server_address"`
 	// Базовый адрес результирующего сокращенного URL
-	BaseURL *url.URL `env:"BASE_URL"`
+	BaseURL *url.URL `env:"BASE_URL" json:"base_url"`
 	// DSN базы данных
-	DatabaseDSN string `env:"DATABASE_DSN"`
+	DatabaseDSN string `env:"DATABASE_DSN" json:"database_dsn"`
 	// Секретный ключ для JWT токена посетителей.
-	VisitorJWTSecret string `env:"VISITOR_JWT_SECRET" envDefault:"super_secret_key"`
+	VisitorJWTSecret string `env:"VISITOR_JWT_SECRET" envDefault:"super_secret_key" json:"-"`
+}
+
+// readConfigFile читает и парсит файл конфигурации в структуру Config.
+func readConfigFile(configFilePath string) (*Config, error) {
+	cfgBytes, err := os.ReadFile(configFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	var conf Config
+	errUnmarshal := json.Unmarshal(cfgBytes, &conf)
+	if errUnmarshal != nil {
+		return nil, fmt.Errorf("unmarshal config: %w", errUnmarshal)
+	}
+	return &conf, nil
 }
 
 // LoadConfig загружает конфигурацию из переменных окружения и флагов командной строки.
@@ -30,6 +47,7 @@ type Config struct {
 // Поддерживаемые переменные окружения:
 //   - FILE_STORAGE_PATH: путь к файлу хранилища
 //   - ENABLE_HTTPS: запуск HTTPS сервера (true/false)
+//   - CONFIG: имя файла конфигурации
 //   - SERVER_ADDRESS: адрес сервера
 //   - BASE_URL: базовый URL для сокращенных ссылок
 //   - DATABASE_DSN: строка подключения к БД
@@ -38,6 +56,7 @@ type Config struct {
 // Поддерживаемые флаги:
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -s: запуск HTTPS сервера (true/false)
+//   - -c: имя файла конфигурации
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок
@@ -49,13 +68,79 @@ func LoadConfig() (*Config, error) {
 	var flagsConfig, envConfig Config
 
 	if err := env.Parse(&envConfig); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 
 	loadsFlags(&flagsConfig)
 
-	conf := mergeConfig(&envConfig, &flagsConfig)
+	configFile := flagsConfig.ConfigJSON
+	if configFile == "" {
+		configFile = envConfig.ConfigJSON
+	}
+
+	fileConfig, err := readConfigFile(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	conf := mergeConfigs(&envConfig, &flagsConfig, fileConfig)
 	return conf, nil
+}
+
+// mergeConfigs объединяет конфигурации из всех источников с учетом приоритетов.
+// Порядок приоритетов (от высшего к низшему):
+// 1. Флаги командной строки
+// 2. Переменные окружения
+// 3. Файл конфигурации.
+func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
+	return &Config{
+		ServerAddress: firstNonEmptyString(
+			flagsConfig.ServerAddress,
+			envConfig.ServerAddress,
+			fileConfig.ServerAddress,
+		),
+		BaseURL: firstNonEmptyURL(
+			flagsConfig.BaseURL,
+			envConfig.BaseURL,
+			fileConfig.BaseURL,
+		),
+		DatabaseDSN: firstNonEmptyString(
+			flagsConfig.DatabaseDSN,
+			envConfig.DatabaseDSN,
+			fileConfig.DatabaseDSN,
+		),
+		FileStoragePath: firstNonEmptyString(
+			flagsConfig.FileStoragePath,
+			envConfig.FileStoragePath,
+			fileConfig.FileStoragePath,
+		),
+		EnableHTTPS: flagsConfig.EnableHTTPS || envConfig.EnableHTTPS || fileConfig.EnableHTTPS,
+		VisitorJWTSecret: firstNonEmptyString(
+			flagsConfig.VisitorJWTSecret,
+			envConfig.VisitorJWTSecret,
+			fileConfig.VisitorJWTSecret,
+		),
+	}
+}
+
+// firstNonEmptyString возвращает первое непустое строковое значение из списка.
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// firstNonEmptyURL возвращает первый непустой URL из списка.
+func firstNonEmptyURL(values ...*url.URL) *url.URL {
+	for _, v := range values {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
 }
 
 // MustLoadConfig аналогичен LoadConfig, но вызывает panic при ошибке.
@@ -77,6 +162,7 @@ func MustLoadConfig() *Config {
 // Поддерживаемые флаги:
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -s: запуск HTTPS сервера (true/false)
+//   - -c: имя файла конфигурации
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок (scheme://host)
@@ -86,6 +172,7 @@ func MustLoadConfig() *Config {
 func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
 	flag.BoolVar(&flagsConfig.EnableHTTPS, "s", false, "Запуск HTTPS")
+	flag.StringVar(&flagsConfig.ConfigJSON, "c", "config.json", "Имя файла конфигурации")
 	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
 	flag.StringVar(&flagsConfig.DatabaseDSN, "d", "", "DSN подключения к СУБД")
 
@@ -105,46 +192,4 @@ func loadsFlags(flagsConfig *Config) {
 	})
 
 	flag.Parse()
-}
-
-// mergeConfig объединяет конфигурации из переменных окружения и флагов.
-// Приоритет отдается значениям из переменных окружения.
-//
-// Параметры:
-//   - envConfig: конфигурация из переменных окружения
-//   - flagsConfig: конфигурация из флагов командной строки
-//
-// Возвращает:
-//   - *Config: объединенная конфигурация
-func mergeConfig(envConfig, flagsConfig *Config) *Config {
-	return &Config{
-		ServerAddress:    defaultIfBlank[string](envConfig.ServerAddress, flagsConfig.ServerAddress),
-		BaseURL:          defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
-		DatabaseDSN:      defaultIfBlank[string](envConfig.DatabaseDSN, flagsConfig.DatabaseDSN),
-		FileStoragePath:  defaultIfBlank[string](envConfig.FileStoragePath, flagsConfig.FileStoragePath),
-		EnableHTTPS:      defaultIfBlank[bool](envConfig.EnableHTTPS, flagsConfig.EnableHTTPS),
-		VisitorJWTSecret: envConfig.VisitorJWTSecret,
-	}
-}
-
-// defaultIfBlank возвращает значение по умолчанию, если переданное значение пустое.
-// Поддерживает типы string и *url.URL.
-//
-// Параметры:
-//   - value: проверяемое значение
-//   - defaultValue: значение по умолчанию
-//
-// Возвращает:
-//   - T: исходное значение или значение по умолчанию
-func defaultIfBlank[T string | *url.URL | bool](value T, defaultValue T) T {
-	if v, ok := any(value).(string); ok && v == "" {
-		return defaultValue
-	}
-	if v, ok := any(value).(*url.URL); ok && v == nil {
-		return defaultValue
-	}
-	if v, ok := any(value).(bool); ok && !v {
-		return defaultValue
-	}
-	return value
 }

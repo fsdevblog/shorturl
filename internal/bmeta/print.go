@@ -2,8 +2,9 @@ package bmeta
 
 import "fmt"
 
-const defaultBuildMeta = "N/A"
+const defaultBuildMeta = "N/A" // Значение по умолчанию
 
+// Print Распечатывает версию, дату и комит сборки.
 func Print(version, date, commit string) {
 	meta := struct {
 		version string

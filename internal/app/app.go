@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsdevblog/shorturl/internal/services/svccert"
+
 	"go.uber.org/zap"
 
 	"github.com/fsdevblog/shorturl/internal/logs"
@@ -86,8 +88,8 @@ func (a *App) restoreBackup() error {
 
 // Run запускает web сервер и обрабатывает сигналы завершения.
 // При получении сигнала SIGINT или SIGTERM выполняет корректное завершение:
-//   - Создает резервную копию данных, если используется in-memory хранилище
-//   - Завершает работу сервера
+//   - Создает резервную копию данных, если используется in-memory хранилище.
+//   - Завершает работу сервера.
 //
 // Возвращает:
 //   - error: ошибка работы сервера
@@ -109,7 +111,29 @@ func (a *App) Run() error {
 	})
 
 	go func() {
-		if err := server.Run(a.config.ServerAddress); err != nil {
+		if a.config.EnableHTTPS {
+			certService := svccert.New()
+			errGen := certService.GenerateAndSaveIfNeed()
+			if errGen != nil {
+				errChan <- errGen
+				return
+			}
+
+			cert, key, errRead := certService.PairString()
+			if errRead != nil {
+				errChan <- errRead
+				return
+			}
+
+			err := server.RunTLS(a.config.ServerAddress, cert, key)
+			if err != nil {
+				errChan <- err
+			}
+			return
+		}
+
+		err := server.Run(a.config.ServerAddress)
+		if err != nil {
 			errChan <- err
 		}
 	}()

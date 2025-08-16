@@ -12,6 +12,8 @@ import (
 type Config struct {
 	// Путь для бекапа (актуально мемори хранилища).
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	// HTTPS сервер.
+	EnableHTTPS bool `env:"ENABLE_HTTPS" envDefault:"false"`
 	// Порт на котором запустится сервер
 	ServerAddress string `env:"SERVER_ADDRESS"`
 	// Базовый адрес результирующего сокращенного URL
@@ -27,6 +29,7 @@ type Config struct {
 //
 // Поддерживаемые переменные окружения:
 //   - FILE_STORAGE_PATH: путь к файлу хранилища
+//   - ENABLE_HTTPS: запуск HTTPS сервера (true/false)
 //   - SERVER_ADDRESS: адрес сервера
 //   - BASE_URL: базовый URL для сокращенных ссылок
 //   - DATABASE_DSN: строка подключения к БД
@@ -34,6 +37,7 @@ type Config struct {
 //
 // Поддерживаемые флаги:
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
+//   - -s: запуск HTTPS сервера (true/false)
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок
@@ -72,6 +76,7 @@ func MustLoadConfig() *Config {
 //
 // Поддерживаемые флаги:
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
+//   - -s: запуск HTTPS сервера (true/false)
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок (scheme://host)
@@ -80,6 +85,7 @@ func MustLoadConfig() *Config {
 //   - flagsConfig: указатель на структуру для сохранения значений флагов
 func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
+	flag.BoolVar(&flagsConfig.EnableHTTPS, "s", false, "Запуск HTTPS")
 	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
 	flag.StringVar(&flagsConfig.DatabaseDSN, "d", "", "DSN подключения к СУБД")
 
@@ -116,6 +122,7 @@ func mergeConfig(envConfig, flagsConfig *Config) *Config {
 		BaseURL:          defaultIfBlank[*url.URL](envConfig.BaseURL, flagsConfig.BaseURL),
 		DatabaseDSN:      defaultIfBlank[string](envConfig.DatabaseDSN, flagsConfig.DatabaseDSN),
 		FileStoragePath:  defaultIfBlank[string](envConfig.FileStoragePath, flagsConfig.FileStoragePath),
+		EnableHTTPS:      defaultIfBlank[bool](envConfig.EnableHTTPS, flagsConfig.EnableHTTPS),
 		VisitorJWTSecret: envConfig.VisitorJWTSecret,
 	}
 }
@@ -129,11 +136,14 @@ func mergeConfig(envConfig, flagsConfig *Config) *Config {
 //
 // Возвращает:
 //   - T: исходное значение или значение по умолчанию
-func defaultIfBlank[T string | *url.URL](value T, defaultValue T) T {
+func defaultIfBlank[T string | *url.URL | bool](value T, defaultValue T) T {
 	if v, ok := any(value).(string); ok && v == "" {
 		return defaultValue
 	}
 	if v, ok := any(value).(*url.URL); ok && v == nil {
+		return defaultValue
+	}
+	if v, ok := any(value).(bool); ok && !v {
 		return defaultValue
 	}
 	return value

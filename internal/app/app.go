@@ -98,6 +98,7 @@ func (a *App) Run() error {
 		return fmt.Errorf("run app: %w", restoreErr)
 	}
 
+	// работа с сигналами уже реализована в предыдущих комитах.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

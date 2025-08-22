@@ -27,6 +27,7 @@ const (
 	defaultShutdownTimeout   = 5 * time.Second // таймаут graceful shutdown
 )
 
+// Options структура опций.
 type Options struct {
 	ReadHeaderTimeout time.Duration // таймаут чтения заголовков, во избежание Slowloris Attack
 	BackupTimeout     time.Duration // таймаут создания бекапа

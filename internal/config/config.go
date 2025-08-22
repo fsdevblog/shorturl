@@ -34,6 +34,11 @@ func readConfigFile(configFilePath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
+	return parseConfigFile(cfgBytes)
+}
+
+// parseConfigFile парсит файл конфигурации в структуру Config.
+func parseConfigFile(cfgBytes []byte) (*Config, error) {
 	var conf Config
 	errUnmarshal := json.Unmarshal(cfgBytes, &conf)
 	if errUnmarshal != nil {

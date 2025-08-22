@@ -99,45 +99,26 @@ func LoadConfig() (*Config, error) {
 // 1. Флаги командной строки
 // 2. Переменные окружения
 // 3. Файл конфигурации.
-func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
+func mergeConfigs(fgc, envc, flc *Config) *Config {
 	return &Config{
-		ServerAddress: firstNonEmpty(
-			flagsConfig.ServerAddress,
-			envConfig.ServerAddress,
-			fileConfig.ServerAddress,
-		),
-		BaseURL: firstNonEmpty(
-			flagsConfig.BaseURL,
-			envConfig.BaseURL,
-			fileConfig.BaseURL,
-		),
-		DatabaseDSN: firstNonEmpty(
-			flagsConfig.DatabaseDSN,
-			envConfig.DatabaseDSN,
-			fileConfig.DatabaseDSN,
-		),
-		FileStoragePath: firstNonEmpty(
-			flagsConfig.FileStoragePath,
-			envConfig.FileStoragePath,
-			fileConfig.FileStoragePath,
-		),
-		EnableHTTPS: flagsConfig.EnableHTTPS || envConfig.EnableHTTPS || fileConfig.EnableHTTPS,
-		VisitorJWTSecret: firstNonEmpty(
-			flagsConfig.VisitorJWTSecret,
-			envConfig.VisitorJWTSecret,
-			fileConfig.VisitorJWTSecret,
-		),
+		ServerAddress:    firstNonEmpty(fgc.ServerAddress, envc.ServerAddress, flc.ServerAddress),
+		BaseURL:          firstNonEmpty(fgc.BaseURL, envc.BaseURL, flc.BaseURL),
+		DatabaseDSN:      firstNonEmpty(fgc.DatabaseDSN, envc.DatabaseDSN, flc.DatabaseDSN),
+		FileStoragePath:  firstNonEmpty(fgc.FileStoragePath, envc.FileStoragePath, flc.FileStoragePath),
+		EnableHTTPS:      firstNonEmpty(fgc.EnableHTTPS, envc.EnableHTTPS, flc.EnableHTTPS),
+		VisitorJWTSecret: firstNonEmpty(fgc.VisitorJWTSecret, envc.VisitorJWTSecret, flc.VisitorJWTSecret),
 	}
 }
 
-// firstNonEmpty возвращает первое непустое строковое значение из списка.
-func firstNonEmpty(values ...string) string {
+// firstNonEmpty возвращает первое непустое значение из списка или значение типа T по умолчанию.
+func firstNonEmpty[T comparable](values ...T) T {
+	var zero T
 	for _, v := range values {
-		if v != "" {
+		if v != zero {
 			return v
 		}
 	}
-	return ""
+	return zero
 }
 
 // MustLoadConfig аналогичен LoadConfig, но вызывает panic при ошибке.

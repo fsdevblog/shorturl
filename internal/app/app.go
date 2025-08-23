@@ -107,7 +107,7 @@ func (a *App) Run() error {
 	server := controllers.SetupRouter(controllers.RouterParams{
 		URLService:  a.dbServices.URLService,
 		PingService: a.dbServices.PingService,
-		AppConf:     a.config,
+		AppConf:     &a.config,
 		Logger:      a.Logger,
 	})
 

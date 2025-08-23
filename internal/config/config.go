@@ -18,6 +18,8 @@ type Config struct {
 	EnableHTTPS bool `env:"ENABLE_HTTPS" envDefault:"false" json:"enable_https"`
 	// Конфиг файл.
 	ConfigJSON string `env:"CONFIG" json:"-"`
+	// CIDR
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 	// Адрес сервера.
 	ServerAddress string `env:"SERVER_ADDRESS" json:"server_address"`
 	// Базовый адрес результирующего сокращенного URL
@@ -49,6 +51,7 @@ func readConfigFile(configFilePath string) (*Config, error) {
 //   - FILE_STORAGE_PATH: путь к файлу хранилища
 //   - ENABLE_HTTPS: запуск HTTPS сервера (true/false)
 //   - CONFIG: имя файла конфигурации
+//   - TRUSTED_SUBNET: CIDR
 //   - SERVER_ADDRESS: адрес сервера
 //   - BASE_URL: базовый URL для сокращенных ссылок
 //   - DATABASE_DSN: строка подключения к БД
@@ -58,6 +61,7 @@ func readConfigFile(configFilePath string) (*Config, error) {
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -s: запуск HTTPS сервера (true/false)
 //   - -c: имя файла конфигурации
+//   - -t: CIDR
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок
@@ -111,6 +115,11 @@ func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
 			envConfig.DatabaseDSN,
 			fileConfig.DatabaseDSN,
 		),
+		TrustedSubnet: firstNonEmpty(
+			flagsConfig.TrustedSubnet,
+			envConfig.TrustedSubnet,
+			fileConfig.TrustedSubnet,
+		),
 		FileStoragePath: firstNonEmpty(
 			flagsConfig.FileStoragePath,
 			envConfig.FileStoragePath,
@@ -155,6 +164,7 @@ func MustLoadConfig() *Config {
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -s: запуск HTTPS сервера (true/false)
 //   - -c: имя файла конфигурации
+//   - -t: CIDR
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок (scheme://host)
@@ -165,6 +175,7 @@ func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.ServerAddress, "a", "localhost:8080", "Адрес сервера")
 	flag.BoolVar(&flagsConfig.EnableHTTPS, "s", false, "Запуск HTTPS")
 	flag.StringVar(&flagsConfig.ConfigJSON, "c", "config.json", "Имя файла конфигурации")
+	flag.StringVar(&flagsConfig.TrustedSubnet, "t", "", "CIDR")
 	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
 	flag.StringVar(&flagsConfig.DatabaseDSN, "d", "", "DSN подключения к СУБД")
 

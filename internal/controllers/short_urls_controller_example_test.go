@@ -30,7 +30,7 @@ func ExampleShortURLController_CreateShortURL() {
 	router := SetupRouter(RouterParams{
 		URLService:  mockStore,
 		PingService: nil,
-		AppConf: config.Config{
+		AppConf: &config.Config{
 			ServerAddress:    ":80",
 			BaseURL:          "http://test.com",
 			VisitorJWTSecret: "secret",

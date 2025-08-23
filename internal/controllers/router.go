@@ -10,10 +10,11 @@ import (
 
 // RouterParams определяет параметры для настройки маршрутизатора.
 type RouterParams struct {
-	URLService  ShortURLStore     // Сервис для работы с короткими URL
-	PingService ConnectionChecker // Сервис для проверки работоспособности системы
-	AppConf     config.Config     // Конфигурация приложения
-	Logger      *zap.Logger       // Логгер приложения
+	URLService   ShortURLStore     // Сервис для работы с короткими URL
+	StatsService StatsProvider     // Сервис статистики
+	PingService  ConnectionChecker // Сервис для проверки работоспособности системы
+	AppConf      *config.Config    // Конфигурация приложения
+	Logger       *zap.Logger       // Логгер приложения
 }
 
 // SetupRouter настраивает и возвращает маршрутизатор приложения.
@@ -38,6 +39,7 @@ type RouterParams struct {
 //	POST /shorten/batch - пакетное создание коротких URL
 //	GET /:shortID - редирект по короткому URL
 //	GET /user/urls - получение URL пользователя
+//	GET /internal/stats - статистика
 //	DELETE /user/urls - удаление URL пользователя
 //
 // Параметры:
@@ -61,6 +63,7 @@ func SetupRouter(params RouterParams) *gin.Engine {
 
 	shortURLController := NewShortURLController(params.URLService, params.AppConf.BaseURL)
 	pingController := NewPingController(params.PingService)
+	statsController := NewStatsController(params.StatsService)
 
 	r.GET("/:shortID", shortURLController.Redirect)
 	r.POST("/", shortURLController.CreateShortURL)
@@ -72,5 +75,10 @@ func SetupRouter(params RouterParams) *gin.Engine {
 	api.GET("/:shortID", shortURLController.Redirect)
 	api.GET("/user/urls", shortURLController.UserURLs)
 	api.DELETE("/user/urls", shortURLController.DeleteUserURLs)
+
+	internal := api.Group("/internal")
+	internal.Use(middlewares.InternalAccess(params.AppConf.TrustedSubnet))
+
+	internal.GET("/stats", statsController.GetStats)
 	return r
 }

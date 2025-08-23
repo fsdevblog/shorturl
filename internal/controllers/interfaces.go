@@ -31,3 +31,8 @@ type ShortURLStore interface {
 	// MarkAsDeleted помечает указанные URL как удаленные.
 	MarkAsDeleted(ctx context.Context, shortIDs []string, visitorUUID string) error
 }
+
+// StatsProvider определяет интерфейс сервиса работы со статистикой.
+type StatsProvider interface {
+	GetStats(ctx context.Context) (*services.Stats, error)
+}

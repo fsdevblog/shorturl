@@ -29,4 +29,5 @@ type URLRepository interface {
 	GetAllByVisitorUUID(ctx context.Context, visitorUUID string) ([]models.URL, error)
 	// DeleteByShortIDsVisitorUUID помечает записи как удаленные.
 	DeleteByShortIDsVisitorUUID(ctx context.Context, visitorUUID string, shortIDs []string) error
+	Stats(ctx context.Context) (*models.Stats, error)
 }

@@ -64,7 +64,7 @@ func (s *ShortURLControllerSuite) SetupTest() {
 	s.router = SetupRouter(RouterParams{
 		URLService:  s.mockShortURLStore,
 		PingService: nil,
-		AppConf:     appConf,
+		AppConf:     &appConf,
 		Logger: logs.MustNew(func(o *logs.LoggerOptions) {
 			o.Level = logs.LevelTypeError
 		}),

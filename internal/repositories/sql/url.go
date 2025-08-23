@@ -31,6 +31,28 @@ func NewURLRepo(conn *pgxpool.Pool) *URLRepo {
 	}
 }
 
+const statQuery = `-- statQuery
+SELECT COUNT(url), COUNT(DISTINCT(visitor_uuid)) FROM urls;
+`
+
+// Stats
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//
+// Возвращает:
+//   - *models.Stats: статистика
+//   - error: ошибка выполнения операции (преобразованная через convertErrType)
+func (u *URLRepo) Stats(ctx context.Context) (*models.Stats, error) {
+	row := u.conn.QueryRow(ctx, statQuery)
+	var r models.Stats
+	scanErr := row.Scan(&r.URLs, &r.Users)
+	if scanErr != nil {
+		return nil, convertErrType(scanErr)
+	}
+	return &r, nil
+}
+
 const batchCreateURLQuery = `-- batchCreateURLs
 INSERT INTO urls 
 	(short_identifier, url, visitor_uuid) 

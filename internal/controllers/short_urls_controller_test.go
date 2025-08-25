@@ -57,7 +57,7 @@ func (s *ShortURLControllerSuite) SetupTest() {
 
 	appConf := config.Config{
 		ServerAddress:    ":80",
-		BaseURL:          &url.URL{Scheme: "http", Host: "test.com:8080"},
+		BaseURL:          "http://test.com:8080",
 		VisitorJWTSecret: jwtSecret,
 	}
 	s.config = &appConf
@@ -321,7 +321,7 @@ func (s *ShortURLControllerSuite) TestShortURLController_CreateShortURL() {
 					}
 					var shortURL string
 					if r.rType == JSONCType {
-						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL.String(), shortIdentifier)
+						shortURL = fmt.Sprintf(`{"result":"%s/%s"}`, s.config.BaseURL, shortIdentifier)
 					} else {
 						shortURL = s.genShortURLForSid(shortIdentifier)
 					}
@@ -592,7 +592,7 @@ func TestShortURLControllerSuite(t *testing.T) {
 }
 
 func (s *ShortURLControllerSuite) genShortURLForSid(sid string) string {
-	return fmt.Sprintf("%s/%s", s.config.BaseURL.String(), sid)
+	return fmt.Sprintf("%s/%s", s.config.BaseURL, sid)
 }
 
 func unGzip(r io.Reader) ([]byte, error) {

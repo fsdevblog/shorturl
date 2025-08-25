@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/fsdevblog/shorturl/internal/services/svccert"
 
 	"go.uber.org/zap"
 
@@ -17,22 +20,41 @@ import (
 	"github.com/fsdevblog/shorturl/internal/services"
 )
 
+// Таймауты по умолчанию.
+const (
+	defaultReadHeaderTimeout = 5 * time.Second // таймаут чтения заголовков, во избежание Slowloris Attack
+	defaultBackupTimeout     = 5 * time.Second // таймаут создания бекапа
+	defaultShutdownTimeout   = 5 * time.Second // таймаут graceful shutdown
+)
+
+// Options структура опций.
+type Options struct {
+	ReadHeaderTimeout time.Duration // таймаут чтения заголовков, во избежание Slowloris Attack
+	BackupTimeout     time.Duration // таймаут создания бекапа
+	ShutdownTimeout   time.Duration // таймаут graceful shutdown
+}
+
 // App представляет собой основной объект приложения.
 type App struct {
 	config     config.Config      // Конфигурация приложения
 	dbServices *services.Services // Сервисный слой для работы с БД
 	Logger     *zap.Logger        // Логгер приложения
+
+	readHeaderTimeout time.Duration
+	backupTimeout     time.Duration
+	shutdownTimeout   time.Duration
 }
 
 // New создает новый экземпляр приложения.
 //
 // Параметры:
 //   - config: конфигурация приложения
+//   - opts: опции
 //
 // Возвращает:
 //   - *App: экземпляр приложения
 //   - error: ошибка инициализации
-func New(config config.Config) (*App, error) {
+func New(config config.Config, opts ...func(*Options)) (*App, error) {
 	logger, errLogger := logs.New()
 	if errLogger != nil {
 		return nil, fmt.Errorf("init logger: %s", errLogger.Error())
@@ -45,11 +67,24 @@ func New(config config.Config) (*App, error) {
 		return nil, fmt.Errorf("init services: %w", servicesErr)
 	}
 
-	return &App{
-		config:     config,
-		dbServices: dbServices,
-		Logger:     logger,
-	}, nil
+	options := &Options{
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		BackupTimeout:     defaultBackupTimeout,
+		ShutdownTimeout:   defaultShutdownTimeout,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	app := &App{
+		config:            config,
+		dbServices:        dbServices,
+		Logger:            logger,
+		readHeaderTimeout: options.ReadHeaderTimeout,
+		backupTimeout:     options.BackupTimeout,
+		shutdownTimeout:   options.ShutdownTimeout,
+	}
+
+	return app, nil
 }
 
 // Must обертка над конструктором, вызывающая panic при ошибке.
@@ -86,8 +121,8 @@ func (a *App) restoreBackup() error {
 
 // Run запускает web сервер и обрабатывает сигналы завершения.
 // При получении сигнала SIGINT или SIGTERM выполняет корректное завершение:
-//   - Создает резервную копию данных, если используется in-memory хранилище
-//   - Завершает работу сервера
+//   - Создает резервную копию данных, если используется in-memory хранилище.
+//   - Завершает работу сервера.
 //
 // Возвращает:
 //   - error: ошибка работы сервера
@@ -101,15 +136,40 @@ func (a *App) Run() error {
 
 	errChan := make(chan error, 1)
 
-	server := controllers.SetupRouter(controllers.RouterParams{
+	router := controllers.SetupRouter(controllers.RouterParams{
 		URLService:  a.dbServices.URLService,
 		PingService: a.dbServices.PingService,
 		AppConf:     a.config,
 		Logger:      a.Logger,
 	})
 
+	httpSrv := &http.Server{
+		Addr:              a.config.ServerAddress,
+		Handler:           router,
+		ReadHeaderTimeout: a.readHeaderTimeout,
+	}
+
 	go func() {
-		if err := server.Run(a.config.ServerAddress); err != nil {
+		if a.config.EnableHTTPS {
+			certService := svccert.New(func(o *svccert.Options) {
+				o.CertFilePath = "certs/cert.pem"
+				o.KeyFilePath = "certs/key.pem"
+			})
+			errGen := certService.GenerateAndSaveIfNeed()
+			if errGen != nil {
+				errChan <- errGen
+				return
+			}
+
+			err := httpSrv.ListenAndServeTLS(certService.CertFilePath(), certService.KeyFilePath())
+			if err != nil {
+				errChan <- err
+			}
+			return
+		}
+
+		err := httpSrv.ListenAndServe()
+		if err != nil {
 			errChan <- err
 		}
 	}()
@@ -118,12 +178,17 @@ func (a *App) Run() error {
 	select {
 	case <-ctx.Done():
 		a.Logger.Info("Shutdown command received")
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
+		defer shutdownCancel()
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			a.Logger.Error("shutdown error", zap.Error(err))
+		}
 		errServer = ctx.Err()
 	case errServer = <-errChan:
 		a.Logger.Error("router error", zap.Error(errServer))
 	}
 
-	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
+	backupCtx, backupCancel := context.WithTimeout(context.Background(), a.backupTimeout)
 	defer backupCancel()
 
 	// Делаем бекап

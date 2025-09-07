@@ -70,6 +70,8 @@ func (s *StatsControllerSuite) Test_GetStats() {
 			}
 		})
 		s.Require().NoError(errRequest)
+		errClose := response.Body.Close()
+		s.Require().NoError(errClose)
 		s.Require().Equal(http.StatusOK, response.StatusCode)
 		s.Equal(expectedStats.URLs, stats.URLs)
 		s.Equal(expectedStats.Users, stats.Users)
@@ -85,6 +87,8 @@ func (s *StatsControllerSuite) Test_GetStats() {
 			}
 		})
 		s.Require().NoError(errRequest)
+		errClose := response.Body.Close()
+		s.Require().NoError(errClose)
 		s.Require().Equal(http.StatusForbidden, response.StatusCode)
 	})
 
@@ -104,6 +108,8 @@ func (s *StatsControllerSuite) Test_GetStats() {
 			}
 		})
 		s.Require().NoError(errRequest)
+		errClose := response.Body.Close()
+		s.Require().NoError(errClose)
 		s.Require().Equal(http.StatusForbidden, response.StatusCode)
 	})
 }

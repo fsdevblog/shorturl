@@ -141,6 +141,7 @@ func (a *App) Run() error {
 		return fmt.Errorf("run app: %w", restoreErr)
 	}
 
+	// работа с сигналами уже реализована в предыдущих комитах.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -164,7 +165,7 @@ func (a *App) Run() error {
 	a.Logger.Info("Shutdown command received")
 	errServer = errors.Join(errServer, ctx.Err())
 
-	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
+	backupCtx, backupCancel := context.WithTimeout(context.Background(), a.backupTimeout)
 	defer backupCancel()
 
 	// Делаем бекап

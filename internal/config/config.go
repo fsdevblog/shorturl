@@ -38,6 +38,11 @@ func readConfigFile(configFilePath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
+	return parseConfigFile(cfgBytes)
+}
+
+// parseConfigFile парсит файл конфигурации в структуру Config.
+func parseConfigFile(cfgBytes []byte) (*Config, error) {
 	var conf Config
 	errUnmarshal := json.Unmarshal(cfgBytes, &conf)
 	if errUnmarshal != nil {
@@ -115,14 +120,15 @@ func mergeConfigs(f, e, fl *Config) *Config {
 	}
 }
 
-// firstNonEmpty возвращает первое непустое строковое значение из списка.
-func firstNonEmpty(values ...string) string {
+// firstNonEmpty возвращает первое непустое значение из списка или значение типа T по умолчанию.
+func firstNonEmpty[T comparable](values ...T) T {
+	var zero T
 	for _, v := range values {
-		if v != "" {
+		if v != zero {
 			return v
 		}
 	}
-	return ""
+	return zero
 }
 
 // MustLoadConfig аналогичен LoadConfig, но вызывает panic при ошибке.

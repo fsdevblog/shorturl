@@ -1,8 +1,9 @@
-package controllers
+package http
 
 import (
 	"github.com/fsdevblog/shorturl/internal/config"
-	"github.com/fsdevblog/shorturl/internal/controllers/middlewares"
+	"github.com/fsdevblog/shorturl/internal/transport/http/middlewares"
+	"github.com/fsdevblog/shorturl/internal/transport/trnptf"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -10,11 +11,11 @@ import (
 
 // RouterParams определяет параметры для настройки маршрутизатора.
 type RouterParams struct {
-	URLService   ShortURLStore     // Сервис для работы с короткими URL
-	StatsService StatsProvider     // Сервис статистики
-	PingService  ConnectionChecker // Сервис для проверки работоспособности системы
-	AppConf      *config.Config    // Конфигурация приложения
-	Logger       *zap.Logger       // Логгер приложения
+	URLProvider  trnptf.URLProvider       // Сервис для работы с короткими URL
+	StatsService trnptf.StatsProvider     // Сервис статистики
+	PingService  trnptf.ConnectionChecker // Сервис для проверки работоспособности системы
+	AppConf      *config.Config           // Конфигурация приложения
+	Logger       *zap.Logger              // Логгер приложения
 }
 
 // SetupRouter настраивает и возвращает маршрутизатор приложения.
@@ -61,7 +62,13 @@ func SetupRouter(params RouterParams) *gin.Engine {
 	r.Use(middlewares.VisitorCookieMiddleware([]byte(params.AppConf.VisitorJWTSecret)))
 	r.Use(middlewares.GzipMiddleware())
 
-	shortURLController := NewShortURLController(params.URLService, params.AppConf.BaseURL)
+	urlFacade := trnptf.New(
+		params.AppConf.EnableHTTPS,
+		params.AppConf.ServerAddress,
+		params.AppConf.BaseURL,
+		params.URLProvider,
+	)
+	shortURLController := NewShortURLController(urlFacade)
 	pingController := NewPingController(params.PingService)
 	statsController := NewStatsController(params.StatsService)
 

@@ -1,12 +1,13 @@
-package controllers
+package http
 
 import (
 	"net/http"
 	"testing"
 
+	"github.com/fsdevblog/shorturl/internal/transport/http/mocksctrl"
+	"github.com/fsdevblog/shorturl/internal/transport/http/testutils"
+
 	"github.com/fsdevblog/shorturl/internal/config"
-	"github.com/fsdevblog/shorturl/internal/controllers/mocksctrl"
-	"github.com/fsdevblog/shorturl/internal/controllers/testutils"
 	"github.com/fsdevblog/shorturl/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"

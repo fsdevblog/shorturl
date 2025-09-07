@@ -2,10 +2,22 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/fsdevblog/shorturl/internal/transport/grpc/itrcpt"
+	pb "github.com/fsdevblog/shorturl/internal/transport/grpc/proto"
+	"github.com/fsdevblog/shorturl/internal/transport/trnptf"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+
+	appgrpc "github.com/fsdevblog/shorturl/internal/transport/grpc"
+	apphttp "github.com/fsdevblog/shorturl/internal/transport/http"
 
 	"github.com/fsdevblog/shorturl/internal/services/svccert"
 
@@ -14,27 +26,45 @@ import (
 	"github.com/fsdevblog/shorturl/internal/logs"
 
 	"github.com/fsdevblog/shorturl/internal/config"
-	"github.com/fsdevblog/shorturl/internal/controllers"
 	"github.com/fsdevblog/shorturl/internal/db"
 	"github.com/fsdevblog/shorturl/internal/services"
 )
+
+// Таймауты по умолчанию.
+const (
+	defaultReadHeaderTimeout = 5 * time.Second // таймаут чтения заголовков, во избежание Slowloris Attack
+	defaultBackupTimeout     = 5 * time.Second // таймаут создания бекапа
+	defaultShutdownTimeout   = 5 * time.Second // таймаут graceful shutdown
+)
+
+// Options опции для App.
+type Options struct {
+	ReadHeaderTimeout time.Duration // таймаут чтения заголовков, во избежание Slowloris Attack
+	BackupTimeout     time.Duration // таймаут создания бекапа
+	ShutdownTimeout   time.Duration // таймаут graceful shutdown
+}
 
 // App представляет собой основной объект приложения.
 type App struct {
 	config     config.Config      // Конфигурация приложения
 	dbServices *services.Services // Сервисный слой для работы с БД
 	Logger     *zap.Logger        // Логгер приложения
+
+	readHeaderTimeout time.Duration
+	backupTimeout     time.Duration
+	shutdownTimeout   time.Duration
 }
 
 // New создает новый экземпляр приложения.
 //
 // Параметры:
 //   - config: конфигурация приложения
+//   - opts: опции
 //
 // Возвращает:
 //   - *App: экземпляр приложения
 //   - error: ошибка инициализации
-func New(config config.Config) (*App, error) {
+func New(config config.Config, opts ...func(*Options)) (*App, error) {
 	logger, errLogger := logs.New()
 	if errLogger != nil {
 		return nil, fmt.Errorf("init logger: %s", errLogger.Error())
@@ -47,11 +77,24 @@ func New(config config.Config) (*App, error) {
 		return nil, fmt.Errorf("init services: %w", servicesErr)
 	}
 
-	return &App{
-		config:     config,
-		dbServices: dbServices,
-		Logger:     logger,
-	}, nil
+	options := &Options{
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		BackupTimeout:     defaultBackupTimeout,
+		ShutdownTimeout:   defaultShutdownTimeout,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	app := &App{
+		config:            config,
+		dbServices:        dbServices,
+		Logger:            logger,
+		readHeaderTimeout: options.ReadHeaderTimeout,
+		backupTimeout:     options.BackupTimeout,
+		shutdownTimeout:   options.ShutdownTimeout,
+	}
+
+	return app, nil
 }
 
 // Must обертка над конструктором, вызывающая panic при ошибке.
@@ -98,52 +141,28 @@ func (a *App) Run() error {
 		return fmt.Errorf("run app: %w", restoreErr)
 	}
 
-	// работа с сигналами уже реализована в предыдущих комитах.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	errChan := make(chan error, 1)
-
-	server := controllers.SetupRouter(controllers.RouterParams{
-		URLService:  a.dbServices.URLService,
-		PingService: a.dbServices.PingService,
-		AppConf:     &a.config,
-		Logger:      a.Logger,
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return a.startHTTPServer(gctx)
+	})
+	g.Go(func() error {
+		return a.startGRPCServer(gctx)
 	})
 
-	go func() {
-		if a.config.EnableHTTPS {
-			certService := svccert.New(func(o *svccert.Options) {
-				o.CertFilePath = "certs/cert.pem"
-				o.KeyFilePath = "certs/key.pem"
-			})
-			errGen := certService.GenerateAndSaveIfNeed()
-			if errGen != nil {
-				errChan <- errGen
-				return
-			}
-
-			err := server.RunTLS(a.config.ServerAddress, certService.CertFilePath(), certService.KeyFilePath())
-			if err != nil {
-				errChan <- err
-			}
-			return
-		}
-
-		err := server.Run(a.config.ServerAddress)
-		if err != nil {
-			errChan <- err
-		}
-	}()
-
 	var errServer error
-	select {
-	case <-ctx.Done():
-		a.Logger.Info("Shutdown command received")
-		errServer = ctx.Err()
-	case errServer = <-errChan:
-		a.Logger.Error("router error", zap.Error(errServer))
+	if errServer = g.Wait(); errServer != nil {
+		if !errors.Is(errServer, http.ErrServerClosed) {
+			a.Logger.Error("server error", zap.Error(errServer))
+		}
+
+		stop()
 	}
+
+	a.Logger.Info("Shutdown command received")
+	errServer = errors.Join(errServer, ctx.Err())
 
 	backupCtx, backupCancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:mnd
 	defer backupCancel()
@@ -163,6 +182,81 @@ func (a *App) Run() error {
 	}
 
 	return errServer
+}
+
+// startGRPCServer запускает GRPC сервер и блокирует дальнейшую работу горутины.
+func (a *App) startGRPCServer(ctx context.Context) error {
+	uf := trnptf.New(a.config.EnableHTTPS, a.config.ServerAddress, a.config.BaseURL, a.dbServices.URLService)
+	srv := grpc.NewServer(grpc.UnaryInterceptor(itrcpt.Visitor))
+	handler := appgrpc.New(uf)
+	pb.RegisterShortURLServer(srv, handler)
+
+	lis, err := net.Listen("tcp", a.config.GRPCAddress)
+	if err != nil {
+		return fmt.Errorf("start GRPC server: %w", err)
+	}
+
+	go func() {
+		<-ctx.Done()
+		srv.GracefulStop()
+	}()
+
+	if errServe := srv.Serve(lis); errServe != nil {
+		return fmt.Errorf("serve GRPC server: %w", errServe)
+	}
+	return nil
+}
+
+// startHTTPServer запускает HTTP сервер и блокирует дальнейшую работу горутины.
+func (a *App) startHTTPServer(ctx context.Context) error {
+	router := apphttp.SetupRouter(apphttp.RouterParams{
+		URLProvider: a.dbServices.URLService,
+		PingService: a.dbServices.PingService,
+		AppConf:     &a.config,
+		Logger:      a.Logger,
+	})
+
+	httpSrv := &http.Server{
+		Addr:              a.config.ServerAddress,
+		Handler:           router,
+		ReadHeaderTimeout: a.readHeaderTimeout,
+	}
+	lis, errLis := net.Listen("tcp", a.config.ServerAddress)
+	if errLis != nil {
+		return fmt.Errorf("start http server: %w", errLis)
+	}
+
+	var shutdownErr error
+	go func() {
+		<-ctx.Done()
+		shutDownCtx, shutDownCancel := context.WithTimeout(ctx, a.shutdownTimeout)
+		defer shutDownCancel()
+		shutdownErr = httpSrv.Shutdown(shutDownCtx)
+	}()
+
+	if a.config.EnableHTTPS {
+		certService := svccert.New(func(o *svccert.Options) {
+			o.CertFilePath = "certs/cert.pem"
+			o.KeyFilePath = "certs/key.pem"
+		})
+		errGen := certService.GenerateAndSaveIfNeed()
+		if errGen != nil {
+			return fmt.Errorf("start http server: %w", errGen)
+		}
+
+		err := httpSrv.ServeTLS(lis, certService.CertFilePath(), certService.KeyFilePath())
+		if err != nil {
+			return fmt.Errorf("start http server: %w", err)
+		}
+		return nil
+	}
+	if err := httpSrv.Serve(lis); err != nil {
+		return fmt.Errorf("start http server: %w", err)
+	}
+	if shutdownErr != nil {
+		return fmt.Errorf("start http server: %w", shutdownErr)
+	}
+	return nil
 }
 
 // initServices инициализирует сервисный слой приложения.

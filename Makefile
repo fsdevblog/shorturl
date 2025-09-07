@@ -81,3 +81,6 @@ pprof-profile:
 
 pprof-heap:
 	go tool pprof -http=":9090" -seconds=30 http://localhost:$(SERVER_PORT)/debug/pprof/heap
+
+proto:
+	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative internal/transport/grpc/proto/shorturl.proto

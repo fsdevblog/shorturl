@@ -1,4 +1,4 @@
-package controllers
+package http
 
 import (
 	"bytes"
@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	"github.com/fsdevblog/shorturl/internal/transport/trnptf/mocks"
+
 	"github.com/fsdevblog/shorturl/internal/config"
-	"github.com/fsdevblog/shorturl/internal/controllers/mocksctrl"
 	"github.com/fsdevblog/shorturl/internal/logs"
 	"github.com/fsdevblog/shorturl/internal/models"
 	"github.com/golang/mock/gomock"
@@ -24,11 +25,11 @@ func ExampleShortURLController_CreateShortURL() {
 	// Настраиваем тестовое окружение
 	ctrl := gomock.NewController(h)
 	defer ctrl.Finish()
-	mockStore := mocksctrl.NewMockShortURLStore(ctrl)
+	mockStore := mocks.NewMockURLProvider(ctrl)
 
 	// Настраиваем роутер
 	router := SetupRouter(RouterParams{
-		URLService:  mockStore,
+		URLProvider: mockStore,
 		PingService: nil,
 		AppConf: &config.Config{
 			ServerAddress:    ":80",

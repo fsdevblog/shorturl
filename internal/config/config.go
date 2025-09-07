@@ -28,6 +28,8 @@ type Config struct {
 	DatabaseDSN string `env:"DATABASE_DSN" json:"database_dsn"`
 	// Секретный ключ для JWT токена посетителей.
 	VisitorJWTSecret string `env:"VISITOR_JWT_SECRET" envDefault:"super_secret_key" json:"-"`
+	// Адрес GRPC сервера.
+	GRPCAddress string `env:"GRPC_ADDRESS" json:"grpc_address"`
 }
 
 // readConfigFile читает и парсит файл конфигурации в структуру Config.
@@ -56,6 +58,7 @@ func readConfigFile(configFilePath string) (*Config, error) {
 //   - BASE_URL: базовый URL для сокращенных ссылок
 //   - DATABASE_DSN: строка подключения к БД
 //   - VISITOR_JWT_SECRET: секрет для JWT (по умолчанию "super_secret_key")
+//   - GRPC_ADDRESS: адрес GRPC сервера (по умолчанию ":50051")
 //
 // Поддерживаемые флаги:
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
@@ -65,6 +68,7 @@ func readConfigFile(configFilePath string) (*Config, error) {
 //   - -a: адрес сервера (по умолчанию "localhost:8080")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок
+//   - -g: адрес GRPC сервера
 //
 // Возвращает:
 //   - *Config: загруженная конфигурация
@@ -98,39 +102,16 @@ func LoadConfig() (*Config, error) {
 // 1. Флаги командной строки
 // 2. Переменные окружения
 // 3. Файл конфигурации.
-func mergeConfigs(flagsConfig, envConfig, fileConfig *Config) *Config {
+func mergeConfigs(f, e, fl *Config) *Config {
 	return &Config{
-		ServerAddress: firstNonEmpty(
-			flagsConfig.ServerAddress,
-			envConfig.ServerAddress,
-			fileConfig.ServerAddress,
-		),
-		BaseURL: firstNonEmpty(
-			flagsConfig.BaseURL,
-			envConfig.BaseURL,
-			fileConfig.BaseURL,
-		),
-		DatabaseDSN: firstNonEmpty(
-			flagsConfig.DatabaseDSN,
-			envConfig.DatabaseDSN,
-			fileConfig.DatabaseDSN,
-		),
-		TrustedSubnet: firstNonEmpty(
-			flagsConfig.TrustedSubnet,
-			envConfig.TrustedSubnet,
-			fileConfig.TrustedSubnet,
-		),
-		FileStoragePath: firstNonEmpty(
-			flagsConfig.FileStoragePath,
-			envConfig.FileStoragePath,
-			fileConfig.FileStoragePath,
-		),
-		EnableHTTPS: flagsConfig.EnableHTTPS || envConfig.EnableHTTPS || fileConfig.EnableHTTPS,
-		VisitorJWTSecret: firstNonEmpty(
-			flagsConfig.VisitorJWTSecret,
-			envConfig.VisitorJWTSecret,
-			fileConfig.VisitorJWTSecret,
-		),
+		ServerAddress:    firstNonEmpty(f.ServerAddress, e.ServerAddress, fl.ServerAddress),
+		BaseURL:          firstNonEmpty(f.BaseURL, e.BaseURL, fl.BaseURL),
+		DatabaseDSN:      firstNonEmpty(f.DatabaseDSN, e.DatabaseDSN, fl.DatabaseDSN),
+		TrustedSubnet:    firstNonEmpty(f.TrustedSubnet, e.TrustedSubnet, fl.TrustedSubnet),
+		FileStoragePath:  firstNonEmpty(f.FileStoragePath, e.FileStoragePath, fl.FileStoragePath),
+		EnableHTTPS:      f.EnableHTTPS || e.EnableHTTPS || fl.EnableHTTPS,
+		VisitorJWTSecret: firstNonEmpty(f.VisitorJWTSecret, e.VisitorJWTSecret, fl.VisitorJWTSecret),
+		GRPCAddress:      firstNonEmpty(f.GRPCAddress, e.GRPCAddress, fl.GRPCAddress),
 	}
 }
 
@@ -168,6 +149,7 @@ func MustLoadConfig() *Config {
 //   - -f: путь к файлу хранилища (по умолчанию "backup.json")
 //   - -d: строка подключения к БД
 //   - -b: базовый URL для сокращенных ссылок (scheme://host)
+//   - -g: адрес GRPC сервера
 //
 // Параметры:
 //   - flagsConfig: указатель на структуру для сохранения значений флагов
@@ -178,6 +160,7 @@ func loadsFlags(flagsConfig *Config) {
 	flag.StringVar(&flagsConfig.TrustedSubnet, "t", "", "CIDR")
 	flag.StringVar(&flagsConfig.FileStoragePath, "f", "backup.json", "Путь до файла бекапа")
 	flag.StringVar(&flagsConfig.DatabaseDSN, "d", "", "DSN подключения к СУБД")
+	flag.StringVar(&flagsConfig.GRPCAddress, "g", ":50051", "адрес GRPC сервера")
 
 	bDesc := "Базовый адрес результирующего сокращенного URL (по умолчанию Scheme://Host запущенного сервера)"
 	flag.Func("b", bDesc, func(rawURL string) error {

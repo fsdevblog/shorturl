@@ -162,3 +162,41 @@ func (mr *MockShortURLStoreMockRecorder) MarkAsDeleted(ctx, shortIDs, visitorUUI
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsDeleted", reflect.TypeOf((*MockShortURLStore)(nil).MarkAsDeleted), ctx, shortIDs, visitorUUID)
 }
+
+// MockStatsProvider is a mock of StatsProvider interface.
+type MockStatsProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockStatsProviderMockRecorder
+}
+
+// MockStatsProviderMockRecorder is the mock recorder for MockStatsProvider.
+type MockStatsProviderMockRecorder struct {
+	mock *MockStatsProvider
+}
+
+// NewMockStatsProvider creates a new mock instance.
+func NewMockStatsProvider(ctrl *gomock.Controller) *MockStatsProvider {
+	mock := &MockStatsProvider{ctrl: ctrl}
+	mock.recorder = &MockStatsProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStatsProvider) EXPECT() *MockStatsProviderMockRecorder {
+	return m.recorder
+}
+
+// GetStats mocks base method.
+func (m *MockStatsProvider) GetStats(ctx context.Context) (*services.Stats, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStats", ctx)
+	ret0, _ := ret[0].(*services.Stats)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStats indicates an expected call of GetStats.
+func (mr *MockStatsProviderMockRecorder) GetStats(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockStatsProvider)(nil).GetStats), ctx)
+}

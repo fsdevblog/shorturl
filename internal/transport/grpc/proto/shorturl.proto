@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package shorturl;
+
+option go_package = "github.com/fsdevblog/shorturl/internal/transport/grpc/proto;shorturl";
+
+message CreateShortURLRequest {
+  string url = 1;
+  string visitorUUID = 2;
+}
+
+message CreateShortURLResponse {
+  string result = 1;
+}
+
+message BatchCreateParams {
+  string correlation_id = 1;
+  string original_url = 2;
+}
+
+message BatchCreateResult {
+  string correlation_id = 1;
+  string short_url = 2;
+  string error = 3;
+}
+
+message BatchCreateRequest {
+  repeated BatchCreateParams urls = 1;
+}
+
+message BatchCreateResponse {
+  repeated BatchCreateResult result = 1;
+}
+
+message DeleteUserURLsRequest {
+  repeated string ids = 1;
+}
+
+message EmptyResponse {
+}
+
+message EmptyRequest {
+}
+
+message UserUrls {
+  string short_url = 1;
+  string original_url = 2;
+}
+
+message UserURLsResponse {
+  repeated UserUrls urls = 1;
+}
+
+service ShortURL {
+  rpc CreateShortURL(CreateShortURLRequest) returns (CreateShortURLResponse);
+  rpc BatchCreate(BatchCreateRequest) returns (BatchCreateResponse);
+  rpc DeleteUserURLs(DeleteUserURLsRequest) returns (EmptyResponse);
+  rpc UserURLs(EmptyRequest) returns (UserURLsResponse);
+}

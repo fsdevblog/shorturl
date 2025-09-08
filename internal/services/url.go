@@ -30,6 +30,31 @@ func NewURLService(urlRepo URLRepository) *URLService {
 	return &URLService{urlRepo: urlRepo}
 }
 
+// Stats хранит статистику.
+type Stats struct {
+	Users int
+	URLs  int
+}
+
+// GetStats возвращает статистику
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//
+// Возвращает:
+//   - *Stats: статистика
+//   - error: ошибка получения данных
+func (u *URLService) GetStats(ctx context.Context) (*Stats, error) {
+	repoStats, err := u.urlRepo.Stats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get stats: %w", err)
+	}
+	return &Stats{
+		Users: repoStats.Users,
+		URLs:  repoStats.URLs,
+	}, nil
+}
+
 // GetAllByVisitorUUID получает все URL для указанного посетителя.
 //
 // Параметры:

@@ -19,6 +19,11 @@ type BatchExecResponse[T any] struct {
 	results []BatchResponseItem[T]
 }
 
+// SetResults записывает результаты с типом T.
+func (b *BatchExecResponse[T]) SetResults(results []BatchResponseItem[T]) {
+	b.results = results
+}
+
 // NewBatchExecResponse создает новый экземпляр BatchExecResponse с предварительно выделенной памятью.
 //
 // Параметры:

@@ -140,3 +140,18 @@ func (mr *MockURLRepositoryMockRecorder) GetByURL(ctx, rawURL interface{}) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByURL", reflect.TypeOf((*MockURLRepository)(nil).GetByURL), ctx, rawURL)
 }
+
+// Stats mocks base method.
+func (m *MockURLRepository) Stats(ctx context.Context) (*models.Stats, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stats", ctx)
+	ret0, _ := ret[0].(*models.Stats)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stats indicates an expected call of Stats.
+func (mr *MockURLRepositoryMockRecorder) Stats(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stats", reflect.TypeOf((*MockURLRepository)(nil).Stats), ctx)
+}

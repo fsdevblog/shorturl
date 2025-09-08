@@ -33,6 +33,35 @@ func NewURLRepo(store *db.MemoryStorage) *URLRepo {
 	}
 }
 
+// Stats
+//
+// Параметры:
+//   - ctx: контекст выполнения
+//
+// Возвращает:
+//   - *models.Stats: статистика
+//   - error: ошибка выполнения операции (преобразованная через convertErrType)
+func (u *URLRepo) Stats(ctx context.Context) (*models.Stats, error) {
+	var urlsMap = make(map[string]struct{})
+	var usersMap = make(map[string]struct{})
+
+	stats := new(models.Stats)
+
+	_, err := memory.FilterAll[*models.URL](ctx, u.s.MStorage, func(url *models.URL) bool {
+		if _, ok := urlsMap[url.URL]; !ok {
+			stats.URLs++
+		}
+		if _, ok := usersMap[url.VisitorUUID]; !ok {
+			stats.Users++
+		}
+		return false
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stats: %w", err)
+	}
+	return stats, nil
+}
+
 // BatchCreate создает несколько URL записей одновременно.
 //
 // Параметры:
